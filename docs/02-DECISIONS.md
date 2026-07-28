@@ -239,3 +239,120 @@ would leave the project shaped by constraints that no longer apply, and would me
 inheriting a five-minute cadence that suspends the database mid-month.
 
 ---
+
+## D-006 — Embargo samples at every split boundary
+
+- **Date:** 2026-07-28
+- **Status:** Accepted. Refines D-005, which said the prediction split ports as-is.
+
+**Context**
+
+A closer read of the prior pipeline found a leak its own correction did not catch. The
+earlier fix replaced a two-way split with a genuine three-way train / calibrate / evaluate
+split, which removed the tautology of fitting and grading a calibrator on the same array.
+
+But the splits are bare timestamp cuts, and the label looks forward six hours. A sample
+taken one minute before a boundary has a label determined by events that fall inside the
+next partition. The training set therefore contains a small amount of information about
+the evaluation period. The prior code's comment claims a temporal split "avoids leakage by
+construction" — it avoids leakage from shuffling, not forward-label leakage at the edge.
+
+The magnitude is small: roughly 960 of about 159,000 samples, near 0.6%.
+
+**Decision**
+
+Drop every sample within one label horizon of each split boundary. Assert the embargo in a
+test that fails if the gap is absent.
+
+**Consequences**
+
+A slightly smaller training set, and a number that is honestly earned. Six-tenths of a
+percent will not move the Brier score meaningfully, which is exactly why it is worth
+fixing now: nobody would notice it later, and a leak nobody notices is one that quietly
+survives into the case study.
+
+The wider lesson matters more than the fix. A correction can be real, documented, and
+still incomplete. "We found and fixed the calibration tautology" was true, and the
+pipeline still leaked at the boundary.
+
+**Also noted, not yet decided**
+
+One model feature — whether an observation falls in business hours — is also a knob the
+simulator was given. The model partly learns a dial its own generator was handed. On
+simulated data this is circular by construction. It needs either removing from the feature
+set or disclosing explicitly in the honesty layer; that decision belongs with the
+prediction sprint.
+
+---
+
+## D-007 — Single-instance assumptions are documented and asserted, not assumed
+
+- **Date:** 2026-07-28
+- **Status:** Accepted
+
+**Context**
+
+The prior work put rate limiting in process memory and justified it explicitly by a
+decision that the system would never be hosted. Preempt is hosted, so that justification
+no longer exists.
+
+In-process state is still *correct* here, because the free tier allows exactly one
+instance. But it is correct by accident of a plan limit rather than by design, and nothing
+prevents a future second worker from silently breaking it. The same applies to any
+in-process event bus.
+
+**Decision**
+
+Keep in-process state, and make the assumption explicit and testable rather than implied.
+The service asserts a single instance at startup and refuses to run more than one worker.
+Any component holding cross-request state in memory carries a comment naming this decision.
+
+**Consequences**
+
+Honest, and answerable. "What breaks at scale?" has a real answer: the rate limiter and the
+event bus both assume one process, the service refuses to start a second, and the fix is a
+shared store. That is a better interview answer than discovering the assumption live.
+
+The failure this prevents is specific. Inheriting a justification along with the code it
+justified — where the justification is no longer true — is how a system acquires
+undocumented assumptions.
+
+---
+
+## D-008 — Ingestion publishes an event; the scheduler cannot skip it
+
+- **Date:** 2026-07-28
+- **Status:** Accepted
+
+**Context**
+
+In the prior work the entire chain — ingest, then evaluate alerts, then score risk — fired
+inside the batch-write function via an in-process event bus, with listeners registered at
+application startup. That is fine for a long-running process.
+
+Preempt moves ingestion to an external scheduler. If the ingest path is ever invoked
+through a route that has not registered its listeners, writes succeed and alerts silently
+never fire. Nothing errors; the system simply stops alerting, and the only symptom is an
+alert that does not arrive — which nobody notices until they need it.
+
+**Decision**
+
+Ingestion publishes an event, and listener registration is a startup precondition rather
+than a convention. The application refuses to serve if the expected listeners are not
+registered, and a test asserts that an ingest with no registered listener fails loudly
+instead of quietly succeeding.
+
+**Consequences**
+
+One more startup check, and one silent-failure mode removed. This is the failure class the
+quality bar calls out: something that looks like it worked, reports success, and did
+nothing.
+
+**Alternatives rejected**
+
+Calling the alert evaluator directly from the ingestion path removes the trap but couples
+the writer to the alerts package, which is the coupling the event bus exists to avoid.
+Keeping the convention and documenting it was rejected because the prior work already
+documented conventions it did not enforce, and this is exactly the resulting failure.
+
+---
