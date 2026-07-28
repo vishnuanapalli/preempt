@@ -1,0 +1,36 @@
+name: verify
+
+# CI runs exactly the same gate you run locally, so "green on my machine" and
+# "green in CI" cannot diverge.
+
+# Quoted because YAML 1.1 parsers read a bare `on` as the boolean true.
+# GitHub's parser handles it either way; quoting keeps linters and tooling honest.
+"on":
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The attribution gate scans commit history, so it needs more than
+          # the default shallow clone.
+          fetch-depth: 0
+
+      # --- Toolchain setup. Uncomment the block matching this project's stack. ---
+      # Action versions verified current at scaffold time; re-check when you uncomment.
+      #
+      # - uses: astral-sh/setup-uv@v9
+      # - run: uv sync --frozen
+      #
+      # - uses: actions/setup-node@v7
+      #   with:
+      #     node-version: "22"
+      #     cache: npm
+      # - run: npm ci
+
+      - name: Run the gate
+        run: ./scripts/verify.sh

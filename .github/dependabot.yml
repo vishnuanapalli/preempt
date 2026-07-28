@@ -1,0 +1,22 @@
+version: 2
+
+# A public repository with a wall of unaddressed vulnerability alerts is a bad look on
+# the artifact reviewers actually open. Monthly keeps the noise low.
+#
+# Uncomment the ecosystem this project uses.
+
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+
+  # - package-ecosystem: pip
+  #   directory: "/"
+  #   schedule:
+  #     interval: monthly
+
+  # - package-ecosystem: npm
+  #   directory: "/"
+  #   schedule:
+  #     interval: monthly

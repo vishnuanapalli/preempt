@@ -1,0 +1,43 @@
+# Local tooling and working notes — never committed
+.claude/
+CLAUDE.md
+.omc/
+*.bak
+*.bak.*
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+config/local.*
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.uv/
+
+# Build output
+dist/
+build/
+*.egg-info/
+.next/
+target/
+
+# Test and tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+coverage/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
