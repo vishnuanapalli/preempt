@@ -20,17 +20,13 @@ jobs:
           # the default shallow clone.
           fetch-depth: 0
 
-      # --- Toolchain setup. Uncomment the block matching this project's stack. ---
-      # Action versions verified current at scaffold time; re-check when you uncomment.
-      #
-      # - uses: astral-sh/setup-uv@v9
-      # - run: uv sync --frozen
-      #
-      # - uses: actions/setup-node@v7
-      #   with:
-      #     node-version: "22"
-      #     cache: npm
-      # - run: npm ci
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+        working-directory: api
+
+      # Frontend toolchain is added in Sprint 5, when a frontend exists.
 
       - name: Run the gate
         run: ./scripts/verify.sh

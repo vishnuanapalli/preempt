@@ -184,36 +184,40 @@ else
 fi
 
 # -------------------------------------------------------------------- 3. stack
-# Filled in at Sprint 0 once the stack is chosen. Auto-detects the common cases;
-# replace this block with the project's real commands.
+# Filled in at Sprint 0 (story S-001). These are the project's real commands, not a
+# stub — a gate that echoes a placeholder while sprints get signed off against it is
+# item 1 on the never-ship list, and it is the failure that actually happened in prior
+# work in this domain.
 echo
 echo "3. Stack gate"
 
 ran_any=0
 
-if [ -f pyproject.toml ]; then
+if [ -f api/pyproject.toml ]; then
   ran_any=1
   if command -v uv >/dev/null 2>&1; then
-    uv run ruff check . && pass "ruff" || bad "ruff"
-    uv run pytest -q   && pass "pytest" || bad "pytest"
+    ( cd api && uv run ruff check . )   && pass "ruff"   || bad "ruff"
+    ( cd api && uv run ruff format --check . ) && pass "format" || bad "format"
+    ( cd api && uv run mypy app )       && pass "mypy"   || bad "mypy"
+    ( cd api && uv run pytest )         && pass "pytest" || bad "pytest"
   else
-    bad "pyproject.toml present but uv is not installed"
+    bad "api/pyproject.toml present but uv is not installed"
   fi
 fi
 
-if [ -f package.json ]; then
+if [ -f frontend/package.json ]; then
   ran_any=1
   if command -v npm >/dev/null 2>&1; then
-    npm run --silent lint      && pass "lint"      || bad "lint"
-    npm run --silent typecheck && pass "typecheck" || bad "typecheck"
-    npm run --silent test      && pass "test"      || bad "test"
+    ( cd frontend && npm run --silent lint )      && pass "lint"      || bad "lint"
+    ( cd frontend && npm run --silent typecheck ) && pass "typecheck" || bad "typecheck"
+    ( cd frontend && npm run --silent test )      && pass "test"      || bad "test"
   else
-    bad "package.json present but npm is not installed"
+    bad "frontend/package.json present but npm is not installed"
   fi
 fi
 
 if [ "$ran_any" -eq 0 ]; then
-  # A skip is not a pass. If source is tracked, an unconfigured stack gate is a failure,
+  # A skip is not a pass. If source exists, an unconfigured stack gate is a failure,
   # not an absence — otherwise the project goes green having never run a test.
   if [ -n "$SRC" ]; then
     bad "source files exist but no stack checks are configured — fill in section 3"
