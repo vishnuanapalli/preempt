@@ -13,8 +13,8 @@ in progress.
 
 | Story | State |
 |-------|-------|
-| S-001 gate is real and runs in CI | **Done.** Verified by injecting a defect and watching CI go red |
-| S-002 database provisioned, migrations reversible | **Done.** upgrade → downgrade → upgrade against real Postgres |
+| S-001 gate is real and runs in CI | **Not done.** The gate runs in CI structurally, but no artifact anywhere records the red run. `03-QUALITY.md` DoD 2 requires that output on record and `docs/DEMO.md` explicitly refuses to hold it — a criterion and its deliverable contradicting each other |
+| S-002 database provisioned, migrations reversible | **Not done.** The reversibility round-trip was run against a baseline whose `upgrade()` and `downgrade()` are both `pass`, so it proves nothing. The Neon-branch test database was also replaced by a local one with no ADR |
 | S-003 health endpoint reporting freshness | **Partial.** `/health` and `/ready` split per D-009; `/ready` still returns nulls because no tables exist yet |
 | S-004 live on the public internet | **Partial.** Serving over HTTPS since `43673c8`; one of six acceptance criteria met — see below |
 | S-005 seed script | **Not started** |

@@ -95,7 +95,7 @@ not a preference.
 ## D-003 — Koyeb for the API, Neon for the database, an external scheduler
 
 - **Date:** 2026-07-28
-- **Status:** Accepted
+- **Status:** Accepted. **Hosting half superseded by D-010** — Koyeb is not the platform; Vercel is.
 
 **Context**
 
@@ -288,7 +288,7 @@ prediction sprint.
 ## D-007 — Single-instance assumptions are documented and asserted, not assumed
 
 - **Date:** 2026-07-28
-- **Status:** Accepted
+- **Status:** Accepted. **Mechanism superseded by D-012** (amended by D-010). The principle — assert the assumption rather than imply it — still stands; the single-instance assertion does not.
 
 **Context**
 
@@ -322,7 +322,7 @@ undocumented assumptions.
 ## D-008 — Ingestion publishes an event; the scheduler cannot skip it
 
 - **Date:** 2026-07-28
-- **Status:** Accepted
+- **Status:** Accepted. **Mechanism superseded by D-012** (amended by D-010). The principle — fail loudly rather than silently — still stands; the in-process bus and startup listener precondition do not.
 
 **Context**
 
