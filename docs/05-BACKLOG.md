@@ -68,7 +68,14 @@ never-ship list.
 - [ ] If either measurement contradicts `01-DESIGN.md`, an ADR is written — not a silent adjustment
 
 ### S-005 — Seed script exists and runs
-**MUST** · depends on S-002
+**MUST** · depends on S-002 · **DEFERRED into Sprint 1**
+
+Deferred 2026-07-29. The acceptance criterion is "runs against an empty database without
+error", but Sprint 0 has no tables — the baseline migration creates none. A seed script
+written now would either seed nothing, or invent a schema that Sprint 1 is supposed to
+design, which is the "do not invent state to satisfy acceptance criteria" rule in
+`CLAUDE.md`. It moves to Sprint 1 alongside the schema it seeds, and Sprint 0 closes
+without it.
 
 - [ ] `scripts/seed.py` runs against an empty database without error
 - [ ] Documented in the runbook stub as the recovery path

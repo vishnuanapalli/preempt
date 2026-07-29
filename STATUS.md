@@ -119,9 +119,11 @@ Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
   the backlog was never updated. The remaining five criteria are still the right ones;
   only the platform name is stale. Fix the wording when S-004 is closed, so the checklist
   is not signed off against a platform this no longer uses.
-- **D-010 obsoleted parts of D-007 and D-008.** Rate limiting must move to the database
-  and the delivery worker becomes a scheduled invocation. Neither is built yet — Sprint 3
-  must not be started from the original wording of those two entries.
+- ~~D-010 obsoleted parts of D-007 and D-008.~~ **Resolved by D-012**, which replaces both
+  mechanisms — database-backed rate limiting and a transactional outbox — and keeps their
+  principles. Still unbuilt, but no longer a trap: read D-012, not the original wording of
+  D-007 and D-008. Two things D-012 leaves open on purpose: the per-request database cost
+  of rate limiting is unmeasured against the D-002 budget, and the scheduler is undecided.
 - **The scheduler is undecided in detail.** GitHub Actions cron is the plan, but scheduled
   workflows are disabled after a period of repository inactivity. Confirm before relying
   on it.

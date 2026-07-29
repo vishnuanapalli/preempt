@@ -494,3 +494,77 @@ the ones nobody logs and everyone inherits.
 changing. It is cheap and deterministic enough to fit section 4's constraints, but it was
 not built or tested here, and shipping an untested gate rule is the defect this decision
 exists to prevent. Recorded as a proposal in `~/.claude/PROCESS-LEDGER.md`.
+
+---
+
+## D-012 — Serverless replaces the mechanisms of D-007 and D-008; their principles stand
+
+- **Date:** 2026-07-29
+- **Status:** Accepted
+- **Supersedes:** the *mechanisms* of D-007 and D-008. Their reasoning is untouched and
+  still governs. Written as a separate entry because the log is append-only.
+
+**Context**
+
+D-007 and D-008 were both written for a long-running process. D-010 chose Vercel, and
+neither survives that choice intact.
+
+D-007 kept rate-limiting state in process memory, justified by the free tier allowing
+exactly one instance, and made that assumption safe by asserting it at startup — the
+service refuses to run a second worker. Under serverless there is no instance to count.
+Concurrent invocations each get their own memory, and a "refuse to start a second worker"
+assertion is not merely useless: it is actively misleading, because it would pass on every
+invocation while the property it claims to protect is false. A rate limiter in memory
+would silently permit N times its configured limit, where N is however many lambdas
+happen to be warm — a number nobody controls or observes.
+
+D-008 had ingestion publish to an in-process event bus, with listener registration as a
+startup precondition. Startup now happens per invocation. Listeners registered at import
+time exist only for the invocation that imported them, so the precondition check becomes a
+tautology: it passes because the same process that registered the listener is the one
+checking, every time.
+
+**Decision**
+
+Rate limiting moves to the database. Limits are enforced by a row per (subject, window)
+with an atomic increment, so the enforcement point is the one thing all invocations share.
+The check is a single statement, and it is correct under concurrency because the database
+serialises it — not because we assume the concurrency is one.
+
+Alert delivery becomes a transactional outbox. The outbox row is written in the same
+transaction as the observation that triggers it, and a scheduled invocation delivers
+pending rows. Delivery is idempotent and rows are marked delivered only after the send
+succeeds.
+
+Both principles from the superseded entries carry forward unchanged: an assumption that
+matters is asserted rather than implied, and a path that cannot do its job fails loudly
+rather than succeeding quietly. Only the mechanisms change.
+
+**Consequences**
+
+The outbox is a genuine improvement rather than a workaround, and D-010 already said so:
+an alert can no longer be lost between "observation committed" and "listener notified",
+because those are now one transaction and one durable row. The in-process bus could lose
+exactly that window; the outbox cannot.
+
+Rate limiting now costs a database round-trip per checked request, against a database that
+scale-to-zeros and bills compute by the hour. That is a real cost against the D-002 budget
+and it is not yet measured. It must be measured before the limiter is placed on any path a
+visitor can reach repeatedly.
+
+The delivery worker needs a scheduler, and that scheduler is **not decided**. GitHub
+Actions cron is the current plan and `docs/SERVICES.md` records the constraint that makes
+it doubtful: scheduled workflows are disabled after a period of repository inactivity,
+which is precisely the state a finished portfolio project is in. Deciding this needs its
+own entry, and Sprint 3 must not begin without it.
+
+**Alternatives rejected**
+
+Keeping in-process state and pinning concurrency to one. Vercel's free plan offers no such
+control, so the assumption would be unenforceable — and an unenforceable assumption
+asserted at startup is worse than an unasserted one, because it reads as a guarantee.
+
+A queue service for delivery. It is the right tool and it is another external dependency,
+another account, and another free-tier limit to inventory. The outbox needs no service that
+the project does not already depend on, and the scheduled invocation is required for
+ingestion regardless.
