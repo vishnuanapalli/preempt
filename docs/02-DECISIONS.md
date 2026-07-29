@@ -356,3 +356,60 @@ Keeping the convention and documenting it was rejected because the prior work al
 documented conventions it did not enforce, and this is exactly the resulting failure.
 
 ---
+
+## D-009 — Liveness and readiness are separate endpoints
+
+- **Date:** 2026-07-28
+- **Status:** Accepted. Corrects an arithmetic error in `01-DESIGN.md`.
+
+**Context**
+
+The design derived an ingest cadence from a compute budget: Neon allows about 400 hours of
+compute a month, a 30-minute tick keeps the database awake roughly 122 hours, so there is
+comfortable headroom.
+
+That calculation counted only the scheduler. The same document's observability section
+specifies an external uptime monitor polling `/health` every fifteen minutes. The database
+scale-to-zeros after five minutes and cannot be configured otherwise, so every poll that
+touches it holds it awake for a five-minute minimum. Fifteen-minute polling is therefore a
+one-third duty cycle on its own.
+
+Recomputed as a union with the tick rather than in isolation:
+
+| Configuration | Awake hours per month | Headroom against 400 |
+|---|---|---|
+| Ingest tick only — as the design claimed | 122 | 278 |
+| Tick + 15-minute monitor reading the database | 243 | 157 |
+| Tick + hourly deep check | 122 | 278 |
+
+Two sections of the same document were incompatible. The row-size derivation in the same
+section was checked at the same time and holds: 98 bytes counted properly, against 100
+assumed.
+
+**Decision**
+
+Split the endpoint. `/health` reports liveness and touches nothing, so the uptime monitor
+can poll it as often as it likes at no cost. `/ready` reads the database and reports
+freshness, and is polled hourly — which falls inside wake windows the tick already pays
+for, making its marginal cost approximately zero.
+
+A test asserts `/health` exposes no database-backed field. The comment explaining the
+constraint is not the enforcement; the test is.
+
+**Consequences**
+
+Detection of a suspended service stays at fifteen minutes. Detection of stalled ingestion
+drops to an hour, which is acceptable when the tick itself is thirty minutes.
+
+The wider lesson is the reason this entry exists at all. The error was not a wrong number,
+it was a number computed over an incomplete set of contributors — the estimate counted the
+thing being designed and ignored the monitoring built to watch it. Any budget derived from
+one component's behaviour should be recomputed as a union across everything that touches
+the resource.
+
+**Alternatives rejected**
+
+Polling the combined endpoint hourly would have satisfied the budget with one endpoint, at
+the cost of taking an hour to notice the service was down — which is the thing the monitor
+exists to catch quickly.
+

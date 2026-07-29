@@ -1,12 +1,26 @@
-"""Liveness and freshness.
+"""Liveness and readiness, deliberately split.
 
-Freshness matters more than liveness here. A service that is up but whose ingestion
-stopped six hours ago looks healthy and is not, and on a free tier a silently suspended
-scheduler is a realistic failure. `observation_age_seconds` is what an external uptime
-monitor watches.
+Freshness matters more than liveness: a service that is up but whose ingestion stopped six
+hours ago looks healthy and is not, and on a free tier a silently suspended scheduler is a
+realistic failure.
 
-The database and ingestion fields are placeholders in Sprint 0 — there is no database yet.
-They are `None`, never `0`, because zero means "fresh" and would be a lie.
+But reading freshness costs money here, and the arithmetic is why these are two endpoints
+rather than one.
+
+The database scale-to-zeros after five minutes of inactivity and cannot be configured
+otherwise on the free plan, so *any* query wakes it for a five-minute minimum. An uptime
+monitor polling a database-reading endpoint every fifteen minutes therefore holds the
+compute awake roughly a third of the time — about 243 hours a month against a 400-hour
+budget, before a single visitor loads the demo. The design's own 122-hour estimate counted
+only the ingest tick and missed this (D-009).
+
+So:
+  /health — liveness only. Touches nothing. The uptime monitor polls this, for free.
+  /ready  — reads the database and reports freshness. Polled hourly, which lands inside
+            wake windows the 30-minute ingest tick already pays for.
+
+Freshness is `None`, never `0`, when nothing has been observed. Zero reads as "just now"
+and would make a dead pipeline look healthy.
 """
 
 from __future__ import annotations
@@ -20,8 +34,17 @@ router = APIRouter(tags=["health"])
 
 
 class HealthResponse(BaseModel):
-    status: str = Field(description="'ok' when the service can serve requests.")
+    """Liveness. Deliberately carries no field that would require a database read."""
+
+    status: str = Field(description="'ok' when the process can serve requests.")
     environment: str
+    ingest_interval_seconds: int
+
+
+class ReadyResponse(BaseModel):
+    """Readiness. Reads the database, and therefore costs compute budget to call."""
+
+    status: str
     database: str | None = Field(
         default=None,
         description="Database reachability. None until a database is configured (Sprint 0).",
@@ -33,15 +56,30 @@ class HealthResponse(BaseModel):
             "which would falsely read as fresh."
         ),
     )
-    ingest_interval_seconds: int
+    stale: bool | None = Field(
+        default=None,
+        description="True when the newest observation is older than two ingest intervals.",
+    )
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """Liveness. Safe to poll frequently — touches no external resource."""
     return HealthResponse(
         status="ok",
         environment=settings.environment,
+        ingest_interval_seconds=settings.ingest_interval_seconds,
+    )
+
+
+@router.get("/ready", response_model=ReadyResponse)
+async def ready() -> ReadyResponse:
+    """Readiness and ingestion freshness. Poll hourly at most — see the module docstring."""
+    # Sprint 0 has no database. These stay None rather than being invented, per the
+    # standing rule: defer, don't manufacture state a later sprint will create.
+    return ReadyResponse(
+        status="ok",
         database=None,
         observation_age_seconds=None,
-        ingest_interval_seconds=settings.ingest_interval_seconds,
+        stale=None,
     )
