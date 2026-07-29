@@ -1,0 +1,57 @@
+Cold-start attempt — 2026-07-29
+================================
+
+WHAT THIS IS: first-request latency after an idle window. It is NOT a confirmed
+cold start. See "What this does not establish" below before citing it.
+
+Invocation (run as a background monitor so no other request from this client
+intervened during the idle window):
+
+    /bin/sleep 3900                                   # 65 minutes, no requests from here
+    U="https://preempt-tau.vercel.app/api/v1/health"
+    S=$(date +%s)
+    curl -s -o /dev/null \
+      -w '%{http_code} total=%{time_total}s ttfb=%{time_starttransfer}s connect=%{time_connect}s' \
+      "$U?cb=$S"                                      # measurement 1 — "cold"
+    curl -s -o /dev/null \
+      -w '%{http_code} total=%{time_total}s ttfb=%{time_starttransfer}s' \
+      "$U?cb=$S-w"                                    # measurement 2 — warm, immediately after
+
+Result:
+
+    COLD START after 65 min idle: 200 total=0.400128s ttfb=0.398029s connect=0.055514s
+    WARM immediately after:       200 total=0.231227s ttfb=0.231047s
+
+Delta: 0.400 - 0.231 = 0.169 s
+
+What this does not establish
+----------------------------
+1. That the instance was ever cold. Nothing here proves Vercel evicted it during
+   the 65 minutes. The idle window is only "no requests FROM THIS CLIENT" — the
+   URL is public and any other traffic resets it.
+
+2. A 0.169 s gap is small for a Python cold start, which is the first reason to
+   doubt the label.
+
+3. The second and stronger reason: D-010 (docs/02-DECISIONS.md) predicts a 1-2 s
+   cold start. Measuring 0.400 s is 2.5-5x FASTER than predicted. That is better
+   read as evidence the experiment did not run than as evidence of a fast cold
+   start. An earlier version of the backlog entry read it as beating the design;
+   that reading was wrong and is corrected here.
+
+   (Note also: the 1-2 s figure is D-010's. docs/01-DESIGN.md carries a ~5 s
+   cold-start number, and that one belongs to Koyeb — a platform D-010 replaced
+   and that document still names.)
+
+The defensible claim, and the only one that should be cited:
+
+    After 65 minutes with no request from this client, the first request
+    returned HTTP 200 in 400 ms.
+
+That is a LOWER BOUND on a true cold start, not a measurement of one.
+
+How to actually establish it
+----------------------------
+Vercel reports whether an invocation was a cold start in its runtime logs. Read
+those for the request id returned in the x-vercel-id header rather than inferring
+from latency. Until that is done, S-004's cold-start criterion stays open.
