@@ -462,3 +462,35 @@ than merely preferred, and `statement_cache_size=0` becomes load-bearing.
 Continuing to hunt for free always-on compute. Every option was checked and each fails on
 a specific number, not on taste. Accepting serverless and designing for it honestly is
 better than a long-running process on a host that suspends, reclaims, or bills.
+
+---
+
+## D-011 — The process record is part of the gate
+
+**Decision.** External dependencies are inventoried in `docs/SERVICES.md` and probed by
+`scripts/preflight.sh` before any code depends on them; process cost is recorded in
+`docs/10-FRICTION.md`. Section 4 of `scripts/verify.sh` enforces that these exist. A
+change to the gate is itself a decision and gets an entry here.
+
+**Why.** Two failures in Sprint 0 shared a cause. Three deployments were spent on a 404
+that a local build exposed in seconds, and three dependencies — CLI auth state, a `uv`
+version floor, a connection string — were each discovered while the work was already
+blocked. Nothing required the external surface to be proven before it was depended on.
+
+**Consequences.** Preflight is due by phase 2, so a project cannot reach implementation
+with unprobed dependencies. The gate stays offline and deterministic: it checks the
+artifacts exist, never runs the network probes, and never judges freshness. Network checks
+in a Stop hook would make it slow and flaky, and a flaky gate gets switched off — which is
+worse than no gate. Freshness and probe *quality* belong to `work-breaker` and
+`retro-scribe` at phase boundaries.
+
+**What this entry exists to correct.** The system above was built and shipped in `50c8631`
+with no entry here, which `retro-scribe` caught on its first run: `grep` for
+"preflight|SERVICES|friction" in this file returned zero while the definition of "done"
+had already changed for this project and every future one. Process changes are precisely
+the ones nobody logs and everyone inherits.
+
+**Not adopted.** A gate check failing when `scripts/verify.sh` changes without this file
+changing. It is cheap and deterministic enough to fit section 4's constraints, but it was
+not built or tested here, and shipping an untested gate rule is the defect this decision
+exists to prevent. Recorded as a proposal in `~/.claude/PROCESS-LEDGER.md`.

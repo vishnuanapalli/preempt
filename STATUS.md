@@ -23,11 +23,9 @@ in progress.
 
 The app now serves. Kept here because the diagnosis is the useful part.
 
-```
-$ curl -si https://preempt-tau.vercel.app/api/v1/health | head -1
-HTTP/2 200
-{"status":"ok","environment":"local","ingest_interval_seconds":1800}
-```
+Live values are **not pasted here** — they go stale in minutes and this file then reads as
+evidence for something that is no longer true. `audit/PREFLIGHT.txt` holds the last
+recorded run; `bash scripts/preflight.sh` refreshes it.
 
 - Project: `preempt`, team `vishnus-projects-2166f0a0` (`prj_Brjcgy18oF1blb2WsULftvbE6JZK`)
 - `/api/v1/health` and `/api/v1/ready` return 200; `/docs` renders; an unknown route
@@ -93,12 +91,12 @@ Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
 
 ## Next actions, in order
 
-1. **Set the environment variables** (S-004). Production currently answers
-   `"environment":"local"`, because none are set — that is the live proof they are
-   missing. Needs `PREEMPT_ENVIRONMENT=production` and `PREEMPT_DATABASE_URL` pointed at
-   the **pooled** Neon endpoint; pooling is mandatory under D-010, not optional. Nothing
-   reads the database yet, so the app serves without them — which is exactly how this
-   stays forgotten.
+1. **Finish the environment variables** (S-004). `PREEMPT_ENVIRONMENT=production` is set
+   and live. `PREEMPT_DATABASE_URL` is still unset and waived in `SERVICES.md` — it needs
+   the **pooled** Neon endpoint, scheme `postgresql+asyncpg://`, query string removed;
+   pooling is mandatory under D-010, not optional. Nothing reads the database yet, so the
+   app serves without it — which is exactly how this stays forgotten. Check the current
+   state with `bash scripts/preflight.sh`, not with a value pasted into a document.
 2. **External uptime monitor** on `/api/v1/health` every 15 minutes (S-004). Poll only
    `/health` — `/ready` costs compute budget, per D-009.
 3. **Measure and record** cold-start duration after an hour idle, and CU-hours consumed

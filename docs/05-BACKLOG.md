@@ -59,9 +59,10 @@ never-ship list.
 - [ ] External uptime monitor polls it every 15 minutes — poll `/health` only, never
       `/ready`, which costs compute budget (D-009)
 - [ ] Secrets set as platform environment variables; none in the repository.
-      **Not done, and the live response proves it:** `/health` reports
-      `"environment":"local"` in production because no variables are set. Nothing reads
-      the database yet, so the app serves without them.
+      `PREEMPT_ENVIRONMENT` is set; `PREEMPT_DATABASE_URL` is not, and is waived in
+      `docs/SERVICES.md` until Sprint 1. Current state lives in `audit/PREFLIGHT.txt` —
+      deliberately not restated here, because a pasted response is stale the moment the
+      next deployment lands.
 - [ ] **Measured and recorded:** cold-start duration after one hour idle
 - [ ] **Measured and recorded:** CU-hours consumed in the first 24 hours, extrapolated to a month
 - [ ] If either measurement contradicts `01-DESIGN.md`, an ADR is written — not a silent adjustment

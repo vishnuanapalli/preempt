@@ -1,5 +1,5 @@
 
-Preflight — 2026-07-28 20:59
+Preflight — 2026-07-28 21:53
 
 1. Local toolchain
   PASS  project python 3.12                3.12.12 (uv venv)

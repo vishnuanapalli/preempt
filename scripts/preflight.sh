@@ -125,8 +125,8 @@ case "$envs" in
 esac
 
 case "$envs" in
-  *PREEMPT_DATABASE_URL*) pass "env PREEMPT_DATABASE_URL (neon)" "present (value not printed)" ;;
-  *) waive "env PREEMPT_DATABASE_URL (neon)" "not set; no code reads the database before Sprint 1. Waiver lifts when S-004 closes or the first query ships — whichever comes first." ;;
+  *PREEMPT_DATABASE_URL*) pass "env PREEMPT_DATABASE_URL set" "present (value not printed)" ;;
+  *) waive "env PREEMPT_DATABASE_URL set" "not set; no code reads the database before Sprint 1. Waiver lifts when S-004 closes or the first query ships — whichever comes first." ;;
 esac
 
 # ------------------------------------------------------------------- 5. deployed

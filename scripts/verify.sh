@@ -282,11 +282,19 @@ for line in pathlib.Path("docs/SERVICES.md").read_text().splitlines():
     if len(cells) < 2 or cells[0].lower().startswith("service"):
         continue
     rows.append(cells)
-probe_src = pathlib.Path("scripts/preflight.sh").read_text().lower()
+# Bind to the probe's INVOCATION, not the file's text. The first version searched the
+# whole file, so a comment naming the services satisfied it — the check could not fail,
+# and a label was in fact edited to make it pass. Found by retro-scribe on its first run.
+probe_src = "\n".join(
+    ln for ln in pathlib.Path("scripts/preflight.sh").read_text().splitlines()
+    if re.search(r'^\s*(pass|fail|waive)\s+"', ln)
+).lower()
 missing = []
 for cells in rows:
     name = re.sub(r"[*`]", "", cells[0]).strip()
-    if "NOT PROVISIONED" in " ".join(cells):
+    joined = " ".join(cells).upper()
+    # Exemptions must be written in the manifest, deliberately, with a reason next to them.
+    if "NOT PROVISIONED" in joined or "NO DIRECT PROBE" in joined:
         continue
     key = name.split()[0].lower().strip("*` ")
     if key and key not in probe_src:
