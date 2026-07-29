@@ -51,7 +51,13 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       reached; probes hidden in an uncalled function, an `if false` branch, below `exit 0`,
       or behind `:` still count. `--emitted` proves reachability and preflight asserts it —
       but nothing automated runs preflight. See D-014 and the `check-probes.py` docstring.
-      **Review state: `work-breaker` PASS on `88e7a3e`,** after two rounds of BLOCK that
+      **Review state: `work-breaker` PASS names `88e7a3e`, not HEAD.** `dc836f9` then
+      rewrote `CALL_RE` and `HEREDOC_RE` — the two regexes at the centre of the check — so
+      that verdict does not extend to them and is not being treated as if it does; a
+      re-review of `b81472b` is pending. Before committing, both of the reviewer's
+      preconditions were met: all 13 ids still resolve from the real `preflight.sh`, and a
+      live preflight run agrees via `--emitted` (`PREFLIGHT: PASS (1 waived)`, exit 0). The
+      PASS came after two rounds of BLOCK that
       were both correct and both fixed — round one caught a mutation case that could not
       fail, round two caught the suite testing only one of the check's two inputs. Its three
       remaining MINOR findings are also fixed: the suite now pins that the *Probe column* is
