@@ -367,8 +367,13 @@ def main() -> int:
             print("--emitted needs the path of the file listing emitted ids")
             return 1
         path = pathlib.Path(argv[1])
+        # Well-formed ids only. Every line here is written by an outcome call, but a label
+        # carrying a newline would land stray text in the file, and without this filter that
+        # text is reported as a probe that ran -- noise laundered into a finding, which is
+        # the same defect that once let a SyntaxWarning be parsed as a probe id one file
+        # over. Fabricating a failure is as bad as missing one.
         emitted = (
-            {ln.strip() for ln in path.read_text().splitlines() if ln.strip()}
+            {ln.strip() for ln in path.read_text().splitlines() if ID_RE.match(ln.strip())}
             if path.exists()
             else set()
         )

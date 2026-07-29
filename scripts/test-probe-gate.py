@@ -422,11 +422,32 @@ def main() -> int:
                     f"-- {mechanism} regressed: {out.splitlines()[0] if out else ''}"
                 )
 
+        # 9. `--emitted` must not launder noise into a finding. Every line of the coverage
+        #    file is written by an outcome call, but a label carrying a newline would leave
+        #    stray text there, and reporting it as "a probe ran that nothing declares" is a
+        #    fabricated failure. The identical shape in this file's own --ids parsing turned
+        #    an interpreter warning into four invented findings, so it is pinned on both
+        #    sides rather than fixed once and assumed gone.
+        box = sandbox(tmp, source)
+        seen = box / "seen.txt"
+        seen.write_text("\n".join(ids) + '\nFile "/x/y.py", line 107\nSyntaxWarning: bad\n')
+        code, out = run(box, "--emitted", str(seen))
+        if code != 0:
+            failures.append(
+                "--emitted turns stray text in the coverage file into a finding: "
+                + out.splitlines()[0]
+            )
+        # And it must still notice a probe that genuinely did not run.
+        seen.write_text("\n".join(ids[1:]) + "\n")
+        code, out = run(box, "--emitted", str(seen))
+        if code == 0:
+            failures.append(f"--emitted does not notice that probe '{ids[0]}' never ran")
+
     if failures:
         for f in failures:
             print(f"  {f}")
         return 1
-    cases = 5 + len(disguises) + len(manifest_cases) + len(keeps)
+    cases = 7 + len(disguises) + len(manifest_cases) + len(keeps)
     print(f"probe check is failable ({len(ids)} probes mutated, {cases} cases)")
     return 0
 

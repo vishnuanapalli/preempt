@@ -48,7 +48,7 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       scanning. One shared implementation (`scripts/check-probes.py`) serves the gate,
       preflight's runtime coverage assertion, and the mutation test.
       `scripts/test-probe-gate.py` runs in the gate and proves the check can fail —
-      thirty-four cases in both directions, mutating **both** of the check's inputs, since the guards against a
+      thirty-six cases in both directions, mutating **both** of the check's inputs, since the guards against a
       vacuous check live on the manifest side and a first version that mutated only
       `preflight.sh` left them untested. Seventeen sabotages of the check were run to confirm
       each targeted part turns the suite red. Ported to the template, still green on a
@@ -67,8 +67,11 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       asserted the check goes *red*, so no false-FAIL regression was catchable at all.
       That last one had hidden an unpinned mechanism for three rounds. Fixed: `{` must earn
       command position like any other reserved word, and the suite now has inverted
-      must-stay-green cases. 34 cases, both directions; sabotages caught include reverting
-      each of the last two rounds' regressions.
+      must-stay-green cases. The same round also found the noise-as-finding shape surviving
+      in `--emitted`: stray text in the coverage file was reported as a probe that ran, so a
+      fabricated failure, fixed once in the test harness and missed one file over. Both sides
+      now filter. 36 cases, both directions; sabotages caught include reverting each of the
+      last three rounds' regressions.
 
 - [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
       has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
