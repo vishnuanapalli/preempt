@@ -116,6 +116,24 @@ else
   fail docker:timescaledb "timescaledb available" "not checked — container not running"
 fi
 
+# The test database is a separate container on a separate port, and until this probe
+# existed nothing checked it — while `api/tests/test_reversibility.py` drives it to `base`
+# and back on every gate run, and `audit/REVERSIBILITY.txt` makes a version claim about it.
+# Two containers from one compose file can still drift: one can be stopped, or left running
+# from an older image after the pin changes.
+if docker compose ps --status running 2>/dev/null | grep -q preempt-db-test; then
+  tpgv=$(docker compose exec -T db-test psql -U preempt -d preempt_test -tAc 'show server_version' 2>/dev/null | tr -d '[:space:]')
+  tts=$(docker compose exec -T db-test psql -U preempt -d preempt_test -tAc \
+        "select extversion from pg_extension where extname='timescaledb'" 2>/dev/null | tr -d '[:space:]')
+  if [ -n "$tpgv" ]; then
+    pass docker:postgres-test "test database reachable (5434)" "server_version $tpgv, timescaledb ${tts:-none}"
+  else
+    fail docker:postgres-test "test database reachable (5434)" "container up but psql did not answer"
+  fi
+else
+  fail docker:postgres-test "test database reachable (5434)" "container not running — migration reversibility is unproven without it"
+fi
+
 # ------------------------------------------------------------------ 3. source host
 echo
 echo "3. Source host"

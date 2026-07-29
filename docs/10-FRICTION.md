@@ -253,3 +253,202 @@ assumed. → **Rule already exists (R5); this is evidence it works when actually
 Trade-off accepted: an empty commit can no longer force a redeploy, which was the technique
 used on `ad5913e` to pick up an environment variable. `npx vercel@latest redeploy` replaces
 it, recorded in STATUS.md under conventions rather than left to be rediscovered.
+
+---
+
+## 2026-07-29 — Sprint 0 BLOCK item 2, and what the fix for it imported
+
+Covers the reversibility harness that replaced S-002's round-trip criterion (D-015):
+`api/tests/reversibility.py`, `api/tests/test_reversibility.py`,
+`scripts/sabotage-reversibility.sh`, `audit/REVERSIBILITY.txt`.
+
+**One thing bounds everything below.** At the time this was written none of that work was
+committed — `git status` shows four new files and nine modified against `b5120b9` (13:16),
+the last commit of the day. BLOCK item 1, the same defect class one round earlier, left
+eight commits between 02:21 and 03:12, one per review round, so its five rounds are
+countable by anyone who looks. Item 2 leaves none. "Written, verified green, and believed
+done twice before the review" is therefore unverifiable from disk, and so is the review
+verdict itself (reported as 5 BLOCK / 5 MAJOR / 8 MINOR). Two of those findings are
+traceable — `audit/REVERSIBILITY.txt` §4(c) and (d) both say "Found by the adversarial
+review, not by this matrix" — the other sixteen exist only in conversation. → **The rule
+already exists and was not followed:** `STATUS.md:23`, the loop's own instruction, says
+"Commit and push each iteration". No machine can tell one correct large commit from one
+blob that hid three rounds, so there is no enforcement point to add. The gap is compliance,
+and this is its first recorded instance. It is also why the ledger's "nothing measures
+process cost" stays open: item 1 and item 2 are a clean A/B, and the difference is commits.
+
+### The trigger condition for eight artifacts is a story that does not exist
+
+The harness's expiry is pinned to story **S-006**. There is no S-006.
+
+```
+$ grep -n '^### S-0' docs/05-BACKLOG.md
+26:S-001  37:S-002  60:S-003  67:S-004  94:S-005  112:S-010  120:S-011  [abridged]
+$ git log --all -S"S-006" -- docs/05-BACKLOG.md docs/04-PLAN.md docs/01-DESIGN.md
+(no output — S-006 has never appeared in any of those documents, in any commit)
+```
+
+The story that adds the schema is **S-010 — Core schema**, `05-BACKLOG.md:112`. `S-006`
+appears in eight places across six files: `02-DECISIONS.md:730`, `:755`, `:778`;
+`05-BACKLOG.md:53`; `STATUS.md:87`; `audit/REVERSIBILITY.txt:144`;
+`api/tests/reversibility.py:49`; and `api/alembic/versions/cdf9e1c21ca7_baseline.py:25`.
+Its origin is `STATUS.md:87`, written at 13:16 in `b5120b9` when the item was scoped; every
+later artifact copied it, and none checked it against the backlog.
+
+Not cosmetic. The xfail on `test_the_round_trip_covers_at_least_one_schema_object` is
+strict, so the day the schema lands the suite goes red and the fix is to delete the marker —
+and the instruction that tells the next person so points at a story they will not find. The
+same wrong id is in the migration docstring, and in the audit artifact D-015 cites as its
+evidence.
+
+→ **Rule: an identifier that points into another document is verified against that document
+when first written, and never re-established by copying.** Enforcement exists and is cheap:
+require every `S-0[0-9][0-9]` in a tracked file to appear as a `### S-0[0-9][0-9]` heading in
+`docs/05-BACKLOG.md`. Offline, deterministic, no network — the standard `verify.sh` §4 sets
+for itself. It belongs in §4 beside the check that binds `SERVICES.md` to `preflight.sh`:
+same shape, different manifest.
+
+### Eleven tests that do not run where the gate is enforced
+
+```
+$ cd api && env -u PREEMPT_TEST_DATABASE_URL uv run pytest tests/test_reversibility.py
+..................sssssssssss                                            [100%]
+SKIPPED [4] tests/test_reversibility.py:366: PREEMPT_TEST_DATABASE_URL is unset, so
+  migration reversibility is UNPROVEN here.   [abridged: seven further SKIPPED lines]
+18 passed, 11 skipped in 0.25s     # exit 0
+```
+
+`.github/workflows/ci.yml` has no `services:` block and never sets
+`PREEMPT_TEST_DATABASE_URL`, so that is exactly what CI runs; `verify.sh:234` turns exit 0
+into `PASS pytest`. The whole deliverable — the round trip, the class coverage, the skip
+check, the three sabotage migrations — is inert in the one place the gate is enforced on
+every push.
+
+`ci.yml:3` states: "CI runs exactly the same gate you run locally, so 'green on my machine'
+and 'green in CI' cannot diverge." That was true until today. `git grep -n 'mark.integration'
+HEAD -- api/` returns nothing, so before this deliverable no test in the repo could skip.
+Eleven now can, and the comment became false in the single dimension it is about. D-015
+records that CI skips reversibility and BLOCK item 10 already tracks `03-QUALITY.md:51`
+("Tests | pytest, unit + integration | yes"); neither notices that `ci.yml` makes the claim
+in its own header.
+
+This is the second instance of the gate disagreeing with itself across environments. The
+first is in `09-LEARNING.md` — `grep -P` matching nothing on macOS while working in CI — and
+its lesson is written into `verify.sh:69`: "a gate that silently disagrees with itself across
+environments is worse than no gate." Same disagreement, opposite direction; this time the
+local run is the strong one, which is why it reads as safe and is not.
+
+→ **Rule: a test that skips where the gate is enforced is not enforced there. Adding a test
+class that needs a service either provisions that service in CI in the same commit, or
+corrects every document claiming CI coverage in the same commit.** Enforcement point:
+`.github/workflows/ci.yml` — a `services:` block on the same `timescaledb-oss` image
+`docker-compose.yml` pins, plus `PREEMPT_TEST_DATABASE_URL`. That deletes the blind spot
+instead of documenting it, and it is the answer `STATUS.md:279` already reaches for on the
+preflight version of this problem ("If that proof should be automatic, CI is the place, not
+the Stop hook").
+
+### The recognition test was applied to one criterion; its twin is six lines below a gate hole
+
+`b5120b9` proves the shape is visible from wording alone, before any code exists —
+`STATUS.md:81` frames it as "the useful question is not 'is the migration reversible' but
+'what would a round-trip that proves nothing look like, and does this one look like that'."
+That worked. It was then applied to exactly one line. Under S-010, `05-BACKLOG.md:118` still
+reads:
+
+```
+- [ ] Migration reversible against a real database
+```
+
+— the criterion just retired, restated one sprint later, satisfiable by precisely the
+evidence D-015 rejects. The same document already contains the correct form twice: `:34`
+"Deliberately breaking lint turns CI red; this is verified once, by doing it", and `:145`
+"a test proves the count can differ from the input length". Both shapes are in one file, so
+this is an application gap, not a knowledge gap. Forty-seven unticked criteria remain and
+only S-002's has been through the question.
+
+→ **Rule: every acceptance criterion names the observation that would make it false. A
+criterion satisfiable by a command exiting 0 is rejected when written, not when reviewed.**
+**No automated enforcement exists, and none is proposed** — a gate cannot distinguish a
+falsifiable sentence from an unfalsifiable one, and the string heuristics that could try are
+the flaky class §4 rejects on principle. What is enforceable is bounded and worth doing: one
+sweep of the forty-seven open criteria, its result recorded in the backlog, plus a standing
+line in the `work-breaker` brief. Stated plainly rather than inventing a hook.
+
+### The proof that a check can fail left the gate, for the second time in two days
+
+D-014 §3 put the probe check's failability inside the gate — `scripts/test-probe-gate.py`
+runs at `verify.sh:316`, on every invocation. D-015 deliberately did not: "The mutation
+script is not in the gate. It edits a tracked file in place." Three sabotage migrations run
+in-suite; the seventeen-case matrix runs by hand.
+
+```
+$ grep -rn "sabotage-reversibility" --exclude-dir=.git .
+docs/02-DECISIONS.md
+audit/REVERSIBILITY.txt
+```
+
+Nothing in `verify.sh`, `.github/`, or `docs/07-RUNBOOK.md` refers to it — not even the
+runbook. The reasoning for keeping it out of the gate is sound and stands. The consequence
+is the one `STATUS.md:274` already records for preflight ("Nothing automated ever runs
+`scripts/preflight.sh` — not CI, not the gate"), now with a second instance created the same
+day, and this one is weaker: §4 at least checks `audit/PREFLIGHT.txt` exists, while nothing
+checks `audit/REVERSIBILITY.txt` at all. Both artifacts carry a date — `PREFLIGHT.txt:2`
+"2026-07-29 14:24", `REVERSIBILITY.txt:1` "2026-07-29" — and neither names the commit it was
+produced against, so neither can be told apart from a copy that has since gone stale.
+
+→ **Rule: a proof that runs only by hand becomes a claim on the first day nobody runs it.
+Stamp its artifact with the commit it was produced against, so staleness is readable instead
+of assumed.** Enforcement point: the artifact format — one line from `git rev-parse HEAD`,
+written by `preflight.sh` and `sabotage-reversibility.sh` themselves — plus `work-breaker`
+comparing it to the branch head at each boundary. Not the Stop gate: D-014 rejected gating
+on those artifacts being green, for reasons that have not changed. This adds nothing to the
+gate and makes a manual proof auditable, which is the most that is honestly available here.
+
+### A claim in this retro's own brief was false, and the gate could not see it
+
+The brief commissioning this entry stated that `docs/09-LEARNING.md` is "currently empty, due
+at phase 5". It is 129 lines and has been since `6892896` (07-28 20:19), amended in
+`7839c9f` (20:33) — three post-incident notes, including the two the ledger's R5 was earned
+from. The claim's source is `STATUS.md:273`, "**`docs/09-LEARNING.md` is still empty** and
+becomes due at phase 5", in a live gaps list rather than a struck-through one.
+
+Nothing caught it in the eighteen hours and five review rounds since. `verify.sh` §1 checks
+presence, template placeholders, and a ten-line floor, and only for documents due by the
+current phase; `docs/.phase` is `4` and `09-LEARNING.md` is listed at phase 5, so the gate
+never opens the file. This is ledger R7 in a new location — a status *file* rather than a
+status hook — and it did real work: it propagated into the task that produced this entry.
+
+→ **Rule: STATUS.md may not assert the contents of a file it does not quote. "X is empty" is
+a claim with a one-command check; run it or delete the line.** Enforcement is structural, not
+machine: delete the assertion, and let `verify.sh` §1's output be the only statement about
+document completeness — the same move the 2026-07-28 entry made for pasted live values. A
+string heuristic for "is still empty" would be the flaky class §4 rejects, so none is
+proposed.
+
+### What holds up
+
+D-015 and `audit/REVERSIBILITY.txt` are the strongest artifacts this project has produced
+against their own subject. §4 of the audit file records six holes the work found in itself
+and credits two of them to the reviewer rather than to its own matrix; "What this does not
+establish" names row data, grants, ownership, TimescaleDB objects and branched histories as
+unchecked rather than leaving them to be discovered; the one criterion ticked
+(`05-BACKLOG.md:44`) says in its own text that it covers nothing today and names the day it
+starts to. Nothing in this entry contradicts that work. Every finding above is about what
+the deliverable did *not* reach: the sibling criterion, the CI environment, the pointer it
+copied, and the record of how long it took.
+
+### Ledger candidates from this entry
+
+- **Skips are not passes, and a test that skips where the gate runs is not enforced there.**
+  Second instance of environment-divergent gate behaviour in this project. Generalises;
+  proposed as a new standing rule.
+- **A manual proof needs a stamped artifact or it decays to a claim.** Second instance in two
+  days. Generalises; proposed as a new standing rule, or as a clause on R2.
+- **Cross-document identifiers are verified once and never re-established by copying.** New
+  evidence for R4 (verify, do not recall) in a form R4 does not currently cover — the id was
+  not recalled from training, it was invented in a status note and then trusted six times.
+- **R7 extends to status files, not only status displays.** Evidence above; no new rule
+  needed.
+- **Not a candidate:** the falsifiable-criterion rule. It is real and load-bearing, but it
+  has no enforcement point anywhere, and the ledger's own thesis is that a rule without one
+  is a wish. It stays here until the backlog sweep gives it a home.

@@ -686,3 +686,107 @@ for any project that puts application code there.
 deterministic, but it turns an unrelated local condition — a stopped container — into a red
 gate on someone's unrelated commit. The existing rule stands: the gate checks the artifact
 exists; whether it is green and fresh is `work-breaker`'s job at the boundary.
+
+## D-015 — Reversibility is established by comparing schemas, not by the round trip exiting 0
+
+- **Date:** 2026-07-29
+- **Status:** Accepted
+- **Supersedes** the S-002 acceptance criterion "`alembic downgrade base` then `upgrade
+  head` succeeds against a real database", and the round trip's appearance in `DEMO.md` as
+  evidence.
+
+**Context**
+
+S-002's criterion asked for a command, and the command was run, and it exited 0, and it
+was reported as evidence that the migrations are reversible. It establishes nothing. The
+only migration in this project is a baseline whose `upgrade()` and `downgrade()` are both
+`pass`; an empty migration reverses perfectly, and so does one that drops nothing. This is
+the third instance of one shape in this project — a check that cannot fail — after the two
+recorded in D-014. The pattern is recognisable in advance now: *would this check notice if
+the thing it checks were untrue?* The answer here was no, and could have been read off the
+criterion without running anything.
+
+**Decision**
+
+Reversibility is a claim about the database, so it is read from the database.
+`api/tests/reversibility.py` snapshots eleven classes of schema object — schemas,
+relations, columns, indexes, constraints, types, collations, routines, triggers, policies,
+extensions — and `run_round_trip` applies **each migration on its own**, reverses it,
+re-applies it, and then exercises the whole chain end to end, snapshotting at every stop. A
+migration is reversible when the schema after the reverse is indistinguishable from the
+schema before, and re-applying produces what it produced the first time.
+
+Per migration rather than per chain, because a chain-level pass is satisfied by a
+`downgrade()` that compensates for damage an earlier migration did, and because a
+chain-level failure does not say which migration is at fault. With one migration the two
+are indistinguishable; the difference appears exactly when the harness becomes
+load-bearing.
+
+Four consequences, each deliberate:
+
+- **The harness reports its own coverage.** `RoundTrip.covered` counts the objects the
+  migrations create. Today it is zero, so the round trip proves nothing about *these*
+  migrations, and `test_the_round_trip_covers_at_least_one_schema_object` is marked xfail
+  with that reason. It reports XPASS the day S-010 adds a table, which is the signal to
+  remove the marker rather than a failure to fix.
+- **Failure is a verdict, not an exception.** An irreversible migration surfaces three
+  ways: schema residue, a `downgrade()` that raises, and a second `upgrade` that collides
+  with what the first left behind. A harness that handles only the first reports the other
+  two as a crash, which reads as "the test is broken".
+- **Its failability is tested, not asserted.** Three sabotage migrations run on every gate
+  invocation, one per failure path. Above them, `scripts/sabotage-reversibility.sh` breaks
+  the harness seventeen ways and requires each to turn the suite red **for the right
+  reason** — by node id, since a mutation that breaks the module import turns everything
+  red and would satisfy a check that reads only the exit code — plus one comment-only edit
+  that must leave it green.
+- **Its off switch is checked.** `reachable()` decides whether any of this runs. A version
+  of it that always reported "down" turns the entire integration layer into skips and
+  leaves the gate green, which the adversarial review demonstrated with both containers
+  healthy. `test_the_skip_decision_matches_reality` opens a socket, sharing no code with
+  it, and fails if something is listening while the harness says otherwise. The same review
+  found six of the object classes exercised by nothing — `_QUERIES` could be cut to
+  relations and columns with byte-identical output — which is why one test now creates an
+  object of every class against a real database, and why the expected class list is written
+  out rather than derived from `_QUERIES`.
+
+**What this deliberately does not do**
+
+- **No baseline with invented schema.** The obvious way to satisfy the old criterion was to
+  write a real baseline migration. The schema is S-010's, in Sprint 1, and CLAUDE.md
+  forbids inventing state that an acceptance criterion assumes. A criterion that can only
+  be met by building next sprint's work early is a criterion that is wrong.
+- **The gate does not provision a database.** These tests skip where none is reachable,
+  with a message naming what is then unproven, and `-ra` is in pytest's addopts so the
+  message prints. CI provisions no database, so in CI reversibility is skipped rather than
+  checked — visible, and not fixed here. `03-QUALITY.md`'s claim that CI runs integration
+  tests remains open on the Sprint 0 BLOCK list.
+- **`Settings` is not the guard against migrating the wrong database.** It compares two
+  strings, so it passes for `localhost` against `127.0.0.1` or a differing query string,
+  and it does not run at all when `PREEMPT_DATABASE_URL` is unset — CI, a fresh clone, and
+  this project's documented state today. `same_database` compares host, port and database
+  name with loopback spellings folded together, and `_skip_unless_database` fails the run
+  rather than skipping it. Nothing here drives a database to `base` without that check.
+- **The test database is now probed.** `docker:postgres-test` in `SERVICES.md` and
+  `preflight.sh` covers the container on 5434. Until this change the one service this
+  deliverable depends on had no probe, while `docker:postgres` covered only 5433 — two
+  containers from one compose file can still drift, and the audit artifact was making a
+  version claim about a service nothing observed.
+- **The mutation script is not in the gate.** It edits a tracked file in place. A gate that
+  mutates the working tree is one people run only on a clean tree, which is never. It
+  refuses to run when any integration test is skipping, because with the containers stopped
+  four of its cases report green and it prints holes that do not exist.
+- **The xfail is strict.** The day S-010 adds a table, `test_the_round_trip_covers_at_least_
+  one_schema_object` starts passing and a strict xfail turns that into a gate failure. That
+  is the intent: the marker's reason is no longer true and deleting it is the fix. A
+  non-strict marker would report XPASS into a log nobody reads. It also carries
+  `raises=AssertionError`, because otherwise pytest converts an exception raised in the
+  fixture into XFAIL — and a harness that computed nothing emits the same line this
+  project's audit file cites as proof of honest reporting.
+
+**What the harness cannot see**, stated so it is not rediscovered as a surprise: row data,
+grants, ownership, RLS policies, triggers, comments, publications, and domain constraints.
+A downgrade that destroys a table's contents while restoring its shape reads as reversible.
+That gap is why the third sabotage shape seeds *rows* rather than schema — it is the one
+case the snapshot is blind to, and without it the re-application step was pinned by nothing
+and could be deleted with the suite staying green. The first run of the mutation matrix is
+what found that; it is recorded in `audit/REVERSIBILITY.txt` rather than quietly fixed.

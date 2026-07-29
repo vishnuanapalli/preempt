@@ -40,12 +40,20 @@ Six services, each printing the value observed rather than the word "ok". One ro
 Neon — is exempt in writing (`NO DIRECT PROBE`), because it is not reachable from this
 machine and pretending otherwise is how a probe comes to measure nothing.
 
-### 3. The database is real and reversible
+### 3. The database is real, and the reversibility check can fail
 
 ```sh
 docker compose up -d --wait
-cd api && uv run alembic upgrade head && uv run alembic downgrade base && uv run alembic upgrade head
+cd api && uv run pytest tests/test_reversibility.py
 ```
+
+The command this replaces was `alembic upgrade head && alembic downgrade base && alembic
+upgrade head`. It exited 0 and was shown here as evidence, and it proved nothing: the
+baseline's `upgrade()` and `downgrade()` are both `pass`, and an empty migration reverses
+perfectly. What runs now compares the schema before and after, reports how many objects it
+covered — currently zero, and it says so — and carries three deliberately irreversible
+migrations that it must reject. `audit/REVERSIBILITY.txt` records the mutation run behind
+that claim; D-015 has the reasoning.
 
 Local Postgres matches Neon on capability, not just version: the `-oss` image means a
 licensed-only feature fails on a laptop instead of in production.

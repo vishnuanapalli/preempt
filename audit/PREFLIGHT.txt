@@ -1,5 +1,5 @@
 
-Preflight — 2026-07-29 02:20
+Preflight — 2026-07-29 14:24
 
 1. Local toolchain
   PASS   uv:python               project python 3.12            3.12.12 (uv venv)
@@ -10,6 +10,7 @@ Preflight — 2026-07-29 02:20
 2. Local database
   PASS   docker:postgres         postgres reachable (5433)      server_version 18.1
   PASS   docker:timescaledb      timescaledb available          2.24.0
+  PASS   docker:postgres-test    test database reachable (5434) server_version 18.1, timescaledb 2.24.0
 
 3. Source host
   PASS   github:remote           github remote reachable        https://github.com/vishnuanapalli/preempt.git

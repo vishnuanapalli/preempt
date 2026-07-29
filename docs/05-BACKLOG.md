@@ -40,7 +40,21 @@ never-ship list.
 - [ ] Neon project created; connection string in `.env.example` as a placeholder only
 - [ ] A Neon branch serves as the dedicated test database; tests never touch the primary
 - [ ] Baseline migration applies to an empty database
-- [ ] `alembic downgrade base` then `upgrade head` succeeds against a real database
+- [x] A reversibility harness applies each migration on its own against the local test
+      database — the `db-test` container on 5434, not the Neon branch the criterion above
+      still names — reverses it, re-applies it, then exercises the whole chain, and reports
+      any schema object the reverse failed to restore. It is proven able to fail by three
+      deliberately irreversible migrations, one per failure path, and by a seventeen-case
+      mutation run over the harness itself — `api/tests/test_reversibility.py`, evidence in
+      `audit/REVERSIBILITY.txt`, rationale in D-015.
+      **The harness reports coverage, and today it covers nothing:** the baseline creates no
+      schema objects, so there is nothing to reverse and this criterion asserts only that
+      the check exists and works. It starts proving something about *these* migrations when
+      S-010 adds the schema, and `test_the_round_trip_covers_at_least_one_schema_object`
+      turns XPASS on that day.
+      The criterion this replaces — "`alembic downgrade base` then `upgrade head` succeeds
+      against a real database" — was satisfied by a migration whose `upgrade()` and
+      `downgrade()` are both `pass`, and was reported as evidence in the Sprint 0 demo.
 - [ ] A test asserts the test database URL differs from the application's
 
 ### S-003 — Health endpoint reporting freshness
@@ -101,7 +115,15 @@ without it.
 - [ ] Catalog, pool, and three hypertables per `01-DESIGN.md`
 - [ ] `observed_at` is part of every hypertable's primary key
 - [ ] No index that is an exact prefix of its own primary key — never-ship #20
-- [ ] Migration reversible against a real database
+- [ ] `api/tests/test_reversibility.py` reports non-zero coverage and passes — which means
+      deleting the strict xfail on `test_the_round_trip_covers_at_least_one_schema_object`,
+      because from this story on the round trip has something to reverse. The wording this
+      replaces, "migration reversible against a real database", is the criterion S-002
+      retired for being satisfied by a migration that does nothing (D-015); it survived here
+      because it was written one sprint ahead
+- [ ] The harness's blind spot for TimescaleDB is settled before the first hypertable:
+      whether chunk tables carry a `deptype='e'` row in `pg_depend` and are therefore hidden
+      by the extension filter. Recorded as unestablished in `audit/REVERSIBILITY.txt`
 
 ### S-011 — Market simulator, ported
 **MUST** · depends on S-010

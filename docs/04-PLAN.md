@@ -41,7 +41,8 @@ somewhere to land.
 - [ ] `scripts/verify.sh` stack section filled in — ruff, mypy, pytest — and passing
 - [ ] CI setup block uncommented; the gate runs on every push
 - [ ] Neon project created; a branch used as the dedicated test database
-- [ ] Baseline migration applied; `alembic upgrade`/`downgrade` both verified against a real database
+- [ ] Baseline migration applied; reversibility established by a harness that compares the
+      schema before and after, not by the round trip exiting 0 — see S-002 and D-015
 - [ ] Health endpoint reporting liveness and ingestion freshness
 - [ ] Deployed to Koyeb; the health endpoint answers over the public internet
 - [ ] External uptime monitor pointed at it

@@ -1,0 +1,167 @@
+Migration reversibility — 2026-07-29
+====================================
+
+WHAT THIS IS: the record of the reversibility harness being proven able to fail.
+It is NOT evidence that this project's migrations are reversible — today's baseline
+creates no schema objects, so there is nothing to reverse. See "What this does not
+establish" at the bottom, and D-015.
+
+The harness:      api/tests/reversibility.py
+Its tests:        api/tests/test_reversibility.py   (runs on every gate invocation)
+The mutation run: scripts/sabotage-reversibility.sh (run by hand; this file is its output)
+
+Transcripts below are exact except where a line is marked [abridged].
+
+
+1. The suite, against the real test database on 5434
+---------------------------------------------------
+
+    docker compose up -d --wait
+    cd api && uv run pytest tests/test_reversibility.py
+
+    .........................x...                                            [100%]
+    XFAIL tests/test_reversibility.py::test_the_round_trip_covers_at_least_one_schema_object
+      - the baseline migration creates no schema objects, so the round trip above covers
+        nothing and proves nothing (S-002, D-015). Strict: the day Sprint 1 adds a table
+        this fails, and deleting the marker is the fix.
+    28 passed, 1 xfailed in 2.64s
+
+The XFAIL is the honest result and the reason this file exists. Eighteen of those tests
+need no database; eleven exercise the round trip, the class coverage, the skip decision
+and the three sabotage shapes against the container on 5434 — PostgreSQL 18.1 with
+timescaledb 2.24.0, as recorded by the `docker:postgres-test` probe in audit/PREFLIGHT.txt.
+
+The xfail is `strict=True, raises=AssertionError`. Both matter. Without `raises`, pytest
+converts an exception raised in the fixture into XFAIL, and a harness that computed
+nothing at all emits the line above verbatim. Without `strict`, the day the marker stops
+being true is a day nothing happens.
+
+
+2. The same suite where no database is reachable — what CI sees
+---------------------------------------------------------------
+
+    PREEMPT_TEST_DATABASE_URL=postgresql+asyncpg://preempt:x@localhost:5999/preempt_test \
+      uv run pytest tests/test_reversibility.py
+
+    ..................sssssssssss                                            [100%]
+    SKIPPED [1] tests/test_reversibility.py:408: nothing is listening on localhost:5999,
+      so a 'down' verdict agrees
+    SKIPPED [4] tests/test_reversibility.py:380: test database unreachable (OSError: ...
+      Connect call failed ... 5999), so migration reversibility is UNPROVEN here. Start it
+      with `docker compose up -d --wait`.
+    [abridged: six further SKIPPED lines carrying the same reason, one per test]
+    18 passed, 11 skipped in 0.18s
+
+`-ra` is in pytest's addopts so this prints. Under plain `-q` a skip is a dot, and a run
+that proved nothing looks exactly like a run that proved everything.
+
+
+3. The mutation run — the harness broken one part at a time
+------------------------------------------------------------
+
+    ./scripts/sabotage-reversibility.sh
+
+    sabotage matrix — the harness must go red for the right reason, or stay green
+      ok     diff() always reports no difference -> RED (via test_a_table_left_behind_is_reported)
+      ok     diff ignores changed definitions -> RED (via test_a_column_restored_with_a_different_shape_is_reported)
+      ok     _attempt() swallows every migration failure -> RED (via test_the_harness_reports_an_irreversible_migration)
+      ok     reversible always True -> RED (via test_a_round_trip_that_did_not_restore_the_schema_is_not_reversible)
+      ok     per-migration stepping removed -> RED (via test_the_harness_stepped_every_migration)
+      ok     step failures excluded from the verdict -> RED (via test_a_failing_step_makes_the_whole_round_trip_not_reversible)
+      ok     re-application step removed -> RED (via test_the_harness_reports_an_irreversible_migration)
+      ok     reverse step removed -> RED (via test_the_harness_reports_an_irreversible_migration)
+      ok     snapshot() returns nothing -> RED (via test_the_snapshot_sees_every_class_it_claims_to)
+      ok     covered always reports one object -> RED (via test_coverage_is_zero_when_the_migrations_create_nothing)
+      ok     reverse_error not surfaced as a difference -> RED (via test_a_downgrade_that_raises_is_not_reversible)
+      ok     reapply_error not surfaced as a difference -> RED (via test_a_re_application_that_fails_is_not_reversible)
+      ok     reachable() always reports the database is down -> RED (via test_the_skip_decision_matches_reality)
+      ok     half the object classes deleted from the snapshot -> RED (via test_the_snapshot_declares_every_class_this_suite_pins)
+      ok     a NULL component in a definition (guard must raise) -> RED (via test_the_snapshot_sees_every_class_it_claims_to)
+      ok     NULL definitions accepted instead of raising -> RED (via test_the_snapshot_sees_every_class_it_claims_to)
+      ok     same_database() calls every URL distinct -> RED (via test_the_same_database_spelled_two_ways_is_detected)
+      ok     comment-only edit (must stay green) -> GREEN
+
+    SABOTAGE: every case behaved as expected
+
+Each RED case names the node id that must be among the failures. Exit code alone is not
+enough: a mutation that breaks the module import turns everything red and would satisfy a
+check that reads only the exit code, while proving nothing about the assertion the case
+exists to exercise. The GREEN case is the other half — a matrix in which every case
+asserts "goes red" cannot notice a suite that has become unconditionally red.
+
+The script refuses to run if any integration test is skipping. Without that, with the
+containers stopped, four cases report GREEN and the matrix prints holes that do not exist.
+
+
+4. Holes this matrix found, and what closed them
+------------------------------------------------
+
+Each of these was GREEN when first run — the mutation was applied, the harness was broken,
+and the suite did not notice.
+
+  a. **The re-application step was pinned by nothing.** Deleting the second `upgrade`
+     changed no test result, because both sabotage shapes at the time were caught by the
+     schema comparison alone. Closed by a third shape: a migration that seeds rows into a
+     table that already exists. Rows are not schema, so its reverse looks perfect and only
+     the second application collides. Reproduced after the fact — with that shape removed
+     from `SABOTAGE` and `reapply_error` forced to None, the suite reports
+     `28 passed, 1 xfailed`, no failures.
+
+  b. **`covered` could return a constant.** The only assertion on it used a case whose true
+     answer was 1. Closed by two more: one that must report 0, one that must report 3.
+
+  c. **`reachable()` was an off switch with no case.** Replacing its body with a constant
+     "down" removes every database-backed test in the module and leaves `./scripts/verify.sh`
+     reporting `VERIFY: PASS` with both containers healthy. Found by the adversarial review,
+     not by this matrix. Closed by `test_the_skip_decision_matches_reality`, which opens a
+     socket — sharing no code with `reachable` — and fails if something is listening while
+     the harness claims otherwise.
+
+  d. **Six of the eight object classes were exercised by nothing.** Every unit test builds
+     snapshots by hand and the sabotage migrations only ever create a plain table, so
+     cutting `_QUERIES` down to relations and columns produced byte-identical output. Also
+     found by the review. Closed by `test_the_snapshot_sees_every_class_it_claims_to`, which
+     creates one object of each class against the real database, and by keeping the expected
+     class list written out rather than derived from `_QUERIES` — deriving it would have made
+     the test pass by construction.
+
+  e. **The NULL guard was unpinned.** `text || NULL` is NULL in SQL, so one unguarded
+     component erases a whole definition and every object of that class compares equal. The
+     guard that raises on it could be deleted with the suite staying green. Closed by
+     asserting, on a real snapshot, that no definition is the string `'None'` and that a
+     table, a view and a sequence have distinct definitions.
+
+  f. **One mutation tested nothing.** Its pattern matched an identically-worded line in a
+     different function, and it reported a hole that did not exist. The script now fails any
+     case whose mutation matches nothing.
+
+
+What this does not establish
+----------------------------
+
+- **That the migrations are reversible.** The baseline's `upgrade()` and `downgrade()`
+  are both `pass`. `covered` is 0, the round trip has nothing to reverse, and the harness
+  says so rather than reporting a green tick. It becomes load-bearing at S-010.
+- **Anything about the production database.** The round trip runs against the local
+  container on 5434 only. It never connects to Neon.
+- **That it cannot run against the application database — only that it checks.** `-x db=test`
+  selects `PREEMPT_TEST_DATABASE_URL`, and `_skip_unless_database` fails the run outright if
+  that URL names the same host, port and database as `PREEMPT_DATABASE_URL`, treating
+  `localhost` and `127.0.0.1` as one host and ignoring credentials and query strings. The
+  `Settings` guard is a weaker thing and was previously cited here as if it were this one: it
+  compares two strings, so it passes for `localhost` against `127.0.0.1`, and it does not run
+  at all when `PREEMPT_DATABASE_URL` is unset — CI, a fresh clone, and this project today.
+- **Row data, grants, ownership, comments, publications, event triggers, foreign-data
+  wrappers, operator classes, extended statistics, or default privileges.** Not queried.
+  A downgrade that destroys a table's contents while restoring its shape reads as reversible;
+  that is exactly why sabotage shape (a) seeds rows. The full list is in the module docstring
+  and is what is known rather than a bound.
+- **View and routine text.** Compared by hash, so a change is reported as a change but the
+  diff does not show what changed.
+- **TimescaleDB-specific objects** — hypertables, chunks, continuous aggregates, compression
+  and retention policies. None were created. Whether a chunk table carries a `deptype='e'`
+  row in `pg_depend`, and is therefore hidden by the extension filter, is unestablished and
+  should be settled before the first hypertable.
+- **Branched migration histories.** `revisions()` walks a linear chain.
+- **That reversibility is checked anywhere automatically except where a database runs.**
+  CI provisions none, so in CI these eleven tests skip. The skip is loud; it is not a pass.

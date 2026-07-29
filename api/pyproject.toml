@@ -59,9 +59,13 @@ disallow_any_unimported = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 # A test that neither asserts nor errors is not a test.
-addopts = "-q --strict-markers"
+#
+# `-ra` because under `-q` a skip is a dot. The integration tests skip when no database is
+# reachable, and their skip messages say exactly what is then unproven — printing them is
+# what stops a run with nothing verified from looking like a run that verified everything.
+addopts = "-q -ra --strict-markers"
 markers = [
-    "integration: requires a real database; excluded from the default unit run",
+    "integration: requires a real database; skipped with a reason when none is reachable",
 ]
 
 [tool.vercel]

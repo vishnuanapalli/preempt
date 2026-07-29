@@ -19,8 +19,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Apply the change."""
-    pass
+    """Apply the change.
+
+    Empty on purpose: this is a starting point for the chain, not a schema. The schema
+    arrives with S-010 in Sprint 1. Because it creates nothing, the reversibility harness
+    in `api/tests/test_reversibility.py` reports zero coverage against it and says so
+    rather than reporting a green tick — see D-015.
+    """
 
 
 def downgrade() -> None:
@@ -29,5 +34,8 @@ def downgrade() -> None:
     Every migration must be genuinely reversible. With one production database and no
     staging environment, an irreversible migration is the most likely way to destroy
     the live demo, and the seed rebuild is the only other recovery path.
+
+    Reversibility is checked by comparing the schema before and after, not by this
+    function returning without raising. An empty `downgrade()` reverses an empty
+    `upgrade()` perfectly and would satisfy any check built on the exit code.
     """
-    pass

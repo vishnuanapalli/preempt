@@ -4,8 +4,9 @@ Working state for whoever picks this up next, including me in a fresh session. T
 documents in `docs/` are the source of truth for *what* and *why*; this file is only
 *where we stopped*. Delete anything here that has become false rather than letting it rot.
 
-Last updated: 2026-07-29. BLOCK item 1 closed (D-014, work-breaker PASS); items 11 and 12
-opened by the reviews of it.
+Last updated: 2026-07-29. BLOCK item 1 closed (D-014, work-breaker PASS). Item 2 built and
+fixed against a BLOCK review (D-015); re-review pending, and its box stays unticked until
+that returns PASS. Items 11 and 12 were opened by the reviews of item 1; item 13 by item 2's.
 
 ## Running this autonomously
 
@@ -73,26 +74,27 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       now filter. 36 cases, both directions; sabotages caught include reverting each of the
       last three rounds' regressions.
 
-- [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
-      has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
-      it proves nothing. Either a real baseline migration, or the claim comes down.
-      **Scoped 2026-07-29, not yet built.** This is the same shape as item 1 for the third
-      time — a check that cannot fail — and the useful question is not "is the migration
-      reversible" but "what would a round-trip that proves nothing look like, and does this
-      one look like that". It does: an empty migration reverses trivially.
-      Where it lives: `05-BACKLOG.md:43` is the unfalsifiable criterion, `04-PLAN.md:44`
-      repeats it, `DEMO.md:47` ships the round-trip as evidence, and no test in `api/tests/`
-      mentions alembic at all.
-      **Do not write a baseline with invented schema to satisfy it** — schema is Sprint 1
-      (S-006), and CLAUDE.md forbids inventing state an acceptance criterion assumes. The
-      deliverable is a *reversibility harness*: a test that applies each migration and
-      reverses it against the real test database on 5434, asserting the schema returns to
-      its prior state — and that is proven non-vacuous by running it against a deliberately
-      irreversible migration and showing it goes red. On today's empty baseline it should
-      report that there is nothing to prove, which is the honest result. It then becomes
-      load-bearing the moment Sprint 1 adds real tables.
-      Reword the criterion to what the harness actually establishes, rather than leaving a
-      sentence that an empty migration satisfies.
+- [ ] **2. S-002's reversibility is vacuous.** Built 2026-07-29, D-015. **Unticked: the
+      re-review after the BLOCK fixes has not returned yet.**
+      Built as scoped: a reversibility harness rather than a baseline with invented schema.
+      `api/tests/reversibility.py` snapshots eleven classes of schema object and steps each
+      migration — apply, reverse, re-apply — before exercising the whole chain;
+      `api/tests/test_reversibility.py` runs it on every gate invocation with three
+      deliberately irreversible migrations, one per failure path;
+      `scripts/sabotage-reversibility.sh` breaks the harness seventeen ways by hand and
+      requires each to go red *by node id*. Evidence: `audit/REVERSIBILITY.txt`.
+      **Coverage is zero and the harness says so.** The baseline creates nothing, so the
+      round trip has nothing to reverse. The strict xfail on
+      `test_the_round_trip_covers_at_least_one_schema_object` fails the day S-010 lands,
+      which is the day to delete it — that is now a criterion on S-010.
+      **The first version was believed done twice.** The mutation matrix's first run found
+      three unpinned mechanisms; the review that followed found five more, including a
+      one-line off switch in `reachable()` that removed every database-backed test while
+      the gate reported PASS. Both rounds are in `audit/REVERSIBILITY.txt` §4 and
+      `docs/10-FRICTION.md`. Also fixed along the way: the test database on 5434 had no
+      preflight probe (`docker:postgres-test` now), and `S-006` — a story that has never
+      existed — was cited in six files as the trigger for the harness becoming load-bearing.
+      The schema story is **S-010**.
 - [ ] **3. S-001 has no evidence artifact, and its deliverable refuses to hold one.**
       `03-QUALITY.md` DoD 2 requires verify.sh output on record; `docs/DEMO.md` says "no
       command output is pasted here". Resolve the contradiction, then record the red-CI run.
@@ -120,6 +122,17 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       pooling that nothing enforces and that is currently false (a `-pooler` validator is
       three lines; precedent at `core/config.py:45`). `03-QUALITY.md:51` claims CI runs
       integration tests; CI provisions no database. `04-PLAN.md:46` still says Koyeb.
+
+- [ ] **13. The reversibility harness is inert where the gate is actually enforced.**
+      Opened by the review of item 2. `.github/workflows/ci.yml` has no `services:` block and
+      never sets `PREEMPT_TEST_DATABASE_URL`, so in CI the eleven integration tests skip and
+      `verify.sh` still reports `PASS pytest`. Reproduce with
+      `cd api && env -u PREEMPT_TEST_DATABASE_URL uv run pytest tests/test_reversibility.py`
+      → `18 passed, 11 skipped`, exit 0. The skip is loud (`-ra`) and it is not a pass.
+      `ci.yml:3` asserts that green locally and green in CI cannot diverge; that was true
+      until this deliverable, which is the second environment-divergence instance in the
+      project after `grep -P`. Same root as item 10's `03-QUALITY.md:51` claim, and the fix
+      is the same one: provision a database in CI, or stop claiming CI runs integration tests.
 
 - [ ] **12. Parser hardening on `check-probes.py` is open-ended, and should be treated as
       such.** Five review rounds found six shapes that fooled the scanner — argument
@@ -153,7 +166,7 @@ in progress.
 | Story | State |
 |-------|-------|
 | S-001 gate is real and runs in CI | **Not done.** The gate runs in CI structurally, but no artifact anywhere records the red run. `03-QUALITY.md` DoD 2 requires that output on record and `docs/DEMO.md` explicitly refuses to hold it — a criterion and its deliverable contradicting each other |
-| S-002 database provisioned, migrations reversible | **Not done.** The reversibility round-trip was run against a baseline whose `upgrade()` and `downgrade()` are both `pass`, so it proves nothing. The Neon-branch test database was also replaced by a local one with no ADR |
+| S-002 database provisioned, migrations reversible | **Partial.** Reversibility is now established by a harness that compares schemas, and is proven able to fail (D-015, `audit/REVERSIBILITY.txt`) — but it covers nothing until S-010, and it says so. Still open on this story: the Neon project, and the Neon-branch test database that was replaced by a local container with no ADR |
 | S-003 health endpoint reporting freshness | **Partial.** `/health` and `/ready` split per D-009; `/ready` still returns nulls because no tables exist yet |
 | S-004 live on the public internet | **Partial.** Serving over HTTPS since `43673c8`; one of six acceptance criteria met — see below |
 | S-005 seed script | **Deferred into Sprint 1** (docs/05-BACKLOG.md). Needs a decision entry — BLOCK item 7 |
@@ -270,7 +283,10 @@ Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
 - **The pool-clustering statistic in D-004 is unverified.** The paper exists; that specific
   number was not confirmed from its abstract. Do not cite it in the case study without
   reading the full paper.
-- **`docs/09-LEARNING.md` is still empty** and becomes due at phase 5.
+- ~~`docs/09-LEARNING.md` is still empty.~~ **False since `6892896` (2026-07-28).** It is
+  128 lines. The claim survived eighteen hours because the gate lists that file at phase 5
+  while `docs/.phase` is 4, so nothing ever opens it — and it was still being repeated into
+  agent briefs today. Found by `retro-scribe`.
 - **Nothing automated ever runs `scripts/preflight.sh`** — not CI, not the gate. §4 checks
   only that `audit/PREFLIGHT.txt` exists, so a recorded `PREFLIGHT: FAIL` passes the gate.
   This is deliberate (network probes make a Stop hook flaky, and a flaky gate gets switched
