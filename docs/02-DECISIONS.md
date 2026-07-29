@@ -413,3 +413,52 @@ Polling the combined endpoint hourly would have satisfied the budget with one en
 the cost of taking an hour to notice the service was down — which is the thing the monitor
 exists to catch quickly.
 
+
+## D-010 — Vercel, and the consequences of going serverless
+
+- **Date:** 2026-07-28
+- **Status:** Accepted. Supersedes the hosting half of D-003; amends D-007 and D-008.
+
+**Context**
+
+D-003 chose Koyeb for a long-running process. Koyeb did not work in practice, and the
+alternatives are worse: Render sleeps after fifteen minutes with a thirty-to-sixty second
+cold start, Fly.io no longer has a free tier for new accounts, and Oracle Always Free
+reclaims instances whose CPU stays below twenty percent — the exact profile of a demo API.
+
+Vercel supports Python and FastAPI on its free plan, cold-starts in one to two seconds
+rather than thirty to sixty, and also hosts the frontend, so the project has one platform
+instead of two. Netlify was rejected: its Python support is not first-class.
+
+**Decision**
+
+Deploy the API to Vercel as serverless functions. Schedule the ingest tick with GitHub
+Actions cron rather than Vercel Cron, whose free-plan frequency is too restricted for a
+thirty-minute cadence.
+
+**Consequences — the part that matters**
+
+Serverless means no long-running process and many concurrent instances. Two earlier
+decisions assumed the opposite and must change:
+
+- **D-007 (in-process rate limiting) no longer works.** There is no "in process" to hold
+  state in; each instance has its own memory, so a limit would silently permit N times
+  what it claims. Rate limiting moves to the database. The startup assertion D-007
+  describes becomes meaningless and is replaced by the state simply not living in memory.
+- **D-008 (in-process event bus) no longer works.** Nothing persists between requests to
+  host it. Ingestion writes to the outbox in the same transaction as the observation, and
+  the delivery worker runs as a scheduled invocation rather than a background task.
+
+Writing the outbox row inside the ingest transaction is a genuine improvement, not a
+workaround: an alert can no longer be lost between "observation committed" and "listener
+notified", which was the failure mode D-008 was written to prevent by other means.
+
+Connection handling gets harder. Many short-lived instances against a database that
+scale-to-zeros makes pooling essential — the pooled Neon endpoint is now mandatory rather
+than merely preferred, and `statement_cache_size=0` becomes load-bearing.
+
+**Alternatives rejected**
+
+Continuing to hunt for free always-on compute. Every option was checked and each fails on
+a specific number, not on taste. Accepting serverless and designing for it honestly is
+better than a long-running process on a host that suspends, reclaims, or bills.
