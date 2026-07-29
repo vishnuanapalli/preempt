@@ -137,3 +137,11 @@ Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
 - `docs/.phase` gates which documents are required. Bump it only when a phase is genuinely
   complete; the gate is what makes that claim checkable.
 - The decision log is append-only. Supersede, never edit.
+- **An empty commit no longer redeploys.** `ignoreCommand` skips any push that changes
+  nothing under `api/`, which is the point — but it also breaks the trick used on
+  `ad5913e` to pick up a new environment variable. To redeploy without a code change:
+  `npx vercel@latest redeploy <deployment-url> --scope vishnus-projects-2166f0a0`.
+- **Do not build the frontend solo.** When the work reaches `06-UI-SPEC.md` and the UI,
+  stop and hand back. The owner has said explicitly that the frontend is a back-and-forth
+  process, not something to be produced in one pass and reviewed after. Backend, data, and
+  infrastructure continue as normal.
