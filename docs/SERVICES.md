@@ -24,5 +24,6 @@ Kept here so the ask is one batch rather than a trickle. Empty is the goal.
 1. `PREEMPT_DATABASE_URL` — pooled Neon string, scheme `postgresql+asyncpg://`, query string
    removed. Currently waived; the waiver lifts when S-004 closes or the first query ships.
 2. An uptime-monitor account, once one is chosen.
-3. `uv self update` — the installed 0.9.18 is below Vercel's floor, so the local build
-   reproduction that ledger R3 requires cannot run.
+*(The `uv` upgrade that used to be item 3 here is done — `audit/PREFLIGHT.txt` records the
+version actually installed. Asks are removed when satisfied rather than left to be
+re-done.)*

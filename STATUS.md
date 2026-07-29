@@ -83,9 +83,10 @@ framework preset — `api/vercel.json` is what selects the Python builder.
 
 `docs/SERVICES.md` + `scripts/preflight.sh` + `docs/10-FRICTION.md`, enforced by section 4
 of the gate. Run `bash scripts/preflight.sh | tee audit/PREFLIGHT.txt` when a service is
-added or access changes. The last run is **FAIL (1)**: `uv` 0.9.18 is below the 0.9.25 floor
-Vercel requires, so the local `vercel build` reproduction cannot run on this machine —
-`uv self update` clears it. The Neon row is waived in writing until Sprint 1.
+added or access changes. Do not restate its result here — this paragraph previously
+asserted a `uv` failure that `audit/PREFLIGHT.txt` had already recorded as cleared, which
+is exactly the rot the "no pasted live values" rule above exists to prevent, in the file
+that states the rule. Read the artifact. The Neon row is waived in writing until Sprint 1.
 
 Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
 
