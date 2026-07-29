@@ -189,7 +189,7 @@ echo
 # Coverage, not outcome: every probe docs/SERVICES.md declares must have reported
 # something above. A probe that exists in this file but never executes is invisible to the
 # gate's static check, and this is what sees it.
-if ! coverage=$(python3 scripts/check-probes.py --emitted "$SEEN" 2>&1); then
+if ! coverage=$(python3 scripts/check-probes.py --emitted "$SEEN" 2>/dev/null); then
   printf '%s\n' "$coverage" | sed 's/^/  COVERAGE  /'
   fails=$((fails + 1))
   echo

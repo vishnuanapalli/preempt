@@ -104,13 +104,17 @@ ID_RE = re.compile(rf"^{ID}$")
 # preceded by whitespace is NOT enough: an early version accepted that, so `echo hi pass a:b`
 # counted a probe where `pass` is an argument to echo.
 #
-# Words that may precede a command without being it -- `if`, `!`, a `VAR=x` assignment --
-# are allowed in between, but each must itself sit at command position. Offering them as a
-# bare alternative instead was the same bug wearing a hat: `\b(?:then|do)\b` matched the
-# word anywhere, so `echo then pass a:b` counted again. Anything reached only by following
-# this chain from a separator is a command; anything else is an argument.
-LEAD = r"(?:then|else|elif|do|if|while|until|time|!|[A-Za-z_][A-Za-z0-9_]*=\S*)"
-CALL_RE = re.compile(rf"(?:^|[;&|(){{}}])\s*(?:{LEAD}\s+)*(?:pass|fail|waive)\s+({ID})(?=\s|$)")
+# Words that may precede a command without being it -- `if`, `!`, `{`, a `VAR=x` assignment
+# -- are allowed in between, but each must itself sit at command position. Offering them as
+# a bare alternative instead was the same bug wearing a hat: `\b(?:then|do)\b` matched the
+# word anywhere, so `echo then pass a:b` counted again.
+#
+# The separator class holds operators only. `{` and `}` are reserved *words*, so they belong
+# in the chain rather than the class: with `{` unconditional, `echo {pass a:b } done` counted
+# a probe inside a brace-expansion argument. `{` stays in LEAD because `{ pass a:b; }` is a
+# real command group and dropping it outright would lose that.
+LEAD = r"(?:then|else|elif|do|if|while|until|time|!|\{|[A-Za-z_][A-Za-z0-9_]*=\S*)"
+CALL_RE = re.compile(rf"(?:^|[;&|()])\s*(?:{LEAD}\s+)*(?:pass|fail|waive)\s+({ID})(?=\s|$)")
 
 # The start of a heredoc, whose body is data rather than code. Matched at the cursor, so it
 # only fires outside quotes. Group 1 is the `-` form, which alone permits a tab-indented

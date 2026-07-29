@@ -18,6 +18,12 @@ unexercised while the suite reported itself complete.
 A case earns its place by being defeated by one identifiable part of the check. Two of the
 guards genuinely overlap -- delete either the empty-table guard or the vacuity guard and an
 empty manifest still fails; delete both and it passes, which is the case that covers them.
+
+Cases come in both directions, which was the third thing this suite got wrong. For four
+rounds every case asserted the check goes *red*, so nothing could catch a regression that
+made it miss a real probe -- and one duly slipped through: removing the command-prefix chain
+reverted four fixes at once with the suite still green. The `keeps` block asserts the
+opposite, on shapes bash genuinely runs.
 """
 
 from __future__ import annotations
@@ -255,6 +261,15 @@ def main() -> int:
                 "after a loop keyword in argument position",
                 "requiring the keyword to be at command position too",
             ),
+            # `{` is a reserved word, not an operator: it introduces a command only when it
+            # is itself at command position. Unconditional in the separator class, a probe id
+            # inside a brace-expansion argument counted.
+            # Braces are doubled because these templates go through str.format.
+            (
+                "echo {{pass {pid} }} done",
+                "inside a brace-expansion argument",
+                "`{` earning command position",
+            ),
             # `<<\EOF` is the ordinary way to write a non-expanding heredoc without quotes.
             (
                 'cat <<\\EOF\npass {pid} "x" "y"\nEOF',
@@ -371,11 +386,47 @@ def main() -> int:
                     f"-- CALL_RE's trailing boundary is not doing its job"
                 )
 
+        # 8. Cases that must stay GREEN.
+        #
+        #    Every case above asserts the check goes red, which means a regression that makes
+        #    it *miss* a real probe has never been catchable at all. That is not a gap in the
+        #    cases, it is a gap in the shape of the suite: deleting the whole command-prefix
+        #    chain reverted four fixes at once and left this green, and the herestring branch
+        #    had been unpinned for three rounds for the same reason.
+        #
+        #    Each shape below is one bash genuinely runs, so the check must still find the id.
+        keeps = [
+            ('A=1 pass {pid} "x" "y"', "environment-prefixed", "the LEAD chain"),
+            ('if pass {pid} "x" "y"; then :; fi', "an if condition", "the LEAD chain"),
+            ('time pass {pid} "x" "y"', "time-prefixed", "the LEAD chain"),
+            ('if ! pass {pid} "x" "y"; then :; fi', "negated", "the LEAD chain"),
+            ('{ pass {pid} "x" "y"; }', "inside a brace group", "`{` in the LEAD chain"),
+            ('grep -q x <<<"m"\npass {pid} "x" "y"', "after a herestring", "the herestring branch"),
+            (
+                '[ -n "$t" ] && pass {pid} "$t" \\\n    || fail {pid} "no"',
+                "in an && / || chain",
+                "continuation joining",
+            ),
+        ]
+        pid = ids[0]
+        call = re.compile(rf"(?:^|[\s;&|()])(?:pass|fail|waive)\s+{re.escape(pid)}(?=\s|$)")
+        for template, shape, mechanism in keeps:
+            replacement = template.replace("{pid}", pid)
+            mutated = "\n".join(
+                replacement if call.search(ln) else ln for ln in source.splitlines()
+            )
+            code, out = run(sandbox(tmp, mutated), "--static")
+            if code != 0:
+                failures.append(
+                    f"a probe written {shape} is reported missing when bash would run it "
+                    f"-- {mechanism} regressed: {out.splitlines()[0] if out else ''}"
+                )
+
     if failures:
         for f in failures:
             print(f"  {f}")
         return 1
-    cases = 5 + len(disguises) + len(manifest_cases)
+    cases = 5 + len(disguises) + len(manifest_cases) + len(keeps)
     print(f"probe check is failable ({len(ids)} probes mutated, {cases} cases)")
     return 0
 

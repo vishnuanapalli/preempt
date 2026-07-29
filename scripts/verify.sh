@@ -300,21 +300,25 @@ else
   # coverage assertion, and the mutation test below all exercise one implementation rather
   # than three that can drift. Read that file for how the binding works and what it still
   # cannot see.
-  if probes=$(python3 scripts/check-probes.py --static 2>&1); then
+  # stdout only on the success path: folding stderr in prints interpreter noise inside a
+  # green PASS line, which is the same "noise treated as content" shape that once let a
+  # SyntaxWarning be parsed as a probe id. Failure re-runs with stderr, since that is the
+  # rare path and the diagnostics matter there.
+  if probes=$(python3 scripts/check-probes.py --static 2>/dev/null); then
     pass "$probes"
   else
     bad "probe coverage:"
-    printf '%s\n' "$probes" | sed 's/^/          /'
+    python3 scripts/check-probes.py --static 2>&1 | sed 's/^/          /'
   fi
 
   # And the check that the check can fail. Two earlier versions of the probe check shipped
   # unfailable, so its failability is itself gated rather than asserted.
   if [ -f scripts/test-probe-gate.py ]; then
-    if mutation=$(python3 scripts/test-probe-gate.py 2>&1); then
+    if mutation=$(python3 scripts/test-probe-gate.py 2>/dev/null); then
       pass "$mutation"
     else
       bad "the probe check does not fail when it should:"
-      printf '%s\n' "$mutation" | sed 's/^/          /'
+      python3 scripts/test-probe-gate.py 2>&1 | sed 's/^/          /'
     fi
   else
     bad "scripts/test-probe-gate.py missing — nothing proves the probe check can fail"

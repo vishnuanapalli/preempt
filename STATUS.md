@@ -4,8 +4,8 @@ Working state for whoever picks this up next, including me in a fresh session. T
 documents in `docs/` are the source of truth for *what* and *why*; this file is only
 *where we stopped*. Delete anything here that has become false rather than letting it rot.
 
-Last updated: 2026-07-29. BLOCK item 1 fix built (D-014) but unticked pending review;
-item 11 opened by the review of it.
+Last updated: 2026-07-29. BLOCK item 1 closed (D-014, work-breaker PASS); items 11 and 12
+opened by the reviews of it.
 
 ## Running this autonomously
 
@@ -35,8 +35,12 @@ From the adversarial review of 2026-07-29 (15 findings, verdict BLOCK). This is 
 work queue: take the top unresolved item, fix it, verify, commit, tick it here. Ordered by
 severity. Sprint 0 cannot close while any of 1–8 is open.
 
-- [ ] **1. Gate §4's probe check cannot detect a deleted probe.** Fix built 2026-07-29, D-014;
-      **unticked pending review** — see Review state below.
+- [x] **1. Gate §4's probe check cannot detect a deleted probe.** Fixed 2026-07-29, D-014.
+      Re-ticked with the box scoped to the defect it names, per the round-five review: the
+      delete-a-probe case has been red since `147cc77` and re-verified at every commit since.
+      The rolling verdict lives in the Review state line and in item 12, not in this box —
+      as written it was tracking two different things and would untick every time a review
+      found a shape narrower than the last one.
       The defect was reproduced first (`6|` — six rows, zero missing, with every Vercel
       probe deleted) rather than taken on trust. Each row of `SERVICES.md` now declares
       machine-read `service:name` ids; each must appear as the first **unquoted argument**
@@ -44,7 +48,7 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       scanning. One shared implementation (`scripts/check-probes.py`) serves the gate,
       preflight's runtime coverage assertion, and the mutation test.
       `scripts/test-probe-gate.py` runs in the gate and proves the check can fail —
-      twenty-six cases mutating **both** of the check's inputs, since the guards against a
+      thirty-four cases in both directions, mutating **both** of the check's inputs, since the guards against a
       vacuous check live on the manifest side and a first version that mutated only
       `preflight.sh` left them untested. Seventeen sabotages of the check were run to confirm
       each targeted part turns the suite red. Ported to the template, still green on a
@@ -53,22 +57,18 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       reached; probes hidden in an uncalled function, an `if false` branch, below `exit 0`,
       or behind `:` still count. `--emitted` proves reachability and preflight asserts it —
       but nothing automated runs preflight. See D-014 and the `check-probes.py` docstring.
-      **Review state: BLOCK on `b81472b`, findings fixed, re-review pending.** Four rounds
-      of `work-breaker`, every one correct, each catching a different instance of the same
-      mistake — claiming coverage that had not been demonstrated. Round one: a mutation case
-      that could not fail. Round two: the suite testing only one of the check's two inputs.
-      Round three: PASS on `88e7a3e`. Round four: the command-position rule I added in
-      `dc836f9` offered shell keywords as a bare alternative, so `echo then pass a:b` counted
-      a probe — falsifying, in the same commit, the comment claiming that hole was closed.
-      Now fixed: a keyword must itself sit at command position, which also makes `if pass …`,
-      `! pass …`, `time pass …` and `FOO=1 pass …` count correctly; `<<\EOF` heredocs are
-      tracked. 26 cases, 17 sabotages all caught, zero false PASS across 10 adversarial
-      shapes and zero misses across 13 real ones.
-      **The box stays unticked until a review passes on the commit that is actually HEAD.**
-      This file said to untick on a BLOCK and that is being honoured rather than argued with.
-      A verdict naming an older commit does not transfer: `dc836f9` rewrote the two regexes
-      at the centre of the check after the round-three PASS, and round four found a real
-      defect in exactly that rewrite.
+      **Review state: `work-breaker` PASS on `030d83a`; two MAJORs from that round fixed
+      since.** Five rounds, every finding correct, each a different instance of one mistake:
+      claiming coverage that had not been demonstrated. (1) a mutation case that could not
+      fail; (2) the suite testing only one of the check's two inputs; (3) PASS; (4) keywords
+      offered as a bare alternative, so `echo then pass a:b` counted — falsifying, in the same
+      commit, the comment claiming that hole was closed; (5) `{`/`}` unconditional in the
+      separator class, same shape with braces, **and** the structural gap that every case
+      asserted the check goes *red*, so no false-FAIL regression was catchable at all.
+      That last one had hidden an unpinned mechanism for three rounds. Fixed: `{` must earn
+      command position like any other reserved word, and the suite now has inverted
+      must-stay-green cases. 34 cases, both directions; sabotages caught include reverting
+      each of the last two rounds' regressions.
 
 - [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
       has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
@@ -100,6 +100,16 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       pooling that nothing enforces and that is currently false (a `-pooler` validator is
       three lines; precedent at `core/config.py:45`). `03-QUALITY.md:51` claims CI runs
       integration tests; CI provisions no database. `04-PLAN.md:46` still says Koyeb.
+
+- [ ] **12. Parser hardening on `check-probes.py` is open-ended, and should be treated as
+      such.** Five review rounds found six shapes that fooled the scanner — argument
+      position, keywords as arguments, brace expansion, backslash continuation, heredoc
+      terminator forms, ANSI-C quoting. Each was real and each was fixed, but the rate has
+      not fallen, and the reviewer's own note is "expect a sixth to exist". This is not a
+      defect to close; it is a property of hand-parsing shell. The mitigations that matter
+      are already in place — every fixed shape is a permanent case, and the docstring says
+      the list is what is known rather than a bound. Do not spend further rounds hunting
+      shapes unless one is found in a `preflight.sh` anyone would actually write.
 
 - [ ] **11. `DOC_PHASES` in `scripts/verify.sh` has drifted from the template's.** The
       template lists `2:docs/SERVICES.md` and `5:docs/10-FRICTION.md`; preempt's lists
