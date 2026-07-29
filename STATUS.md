@@ -4,7 +4,9 @@ Working state for whoever picks this up next, including me in a fresh session. T
 documents in `docs/` are the source of truth for *what* and *why*; this file is only
 *where we stopped*. Delete anything here that has become false rather than letting it rot.
 
-Last updated: 2026-07-29. BLOCK item 1 closed (D-014, work-breaker PASS). Item 2 built and
+Last updated: 2026-07-29. **D-016 caps verification at the code it covers and narrows the
+loop when the reviewer is unreachable** — owner decision after a diagnostic; it is why items
+4–7, 10, 11 and 13 closed in one pass and are labelled unreviewed. BLOCK item 1 closed (D-014, work-breaker PASS). Item 2 built and
 fixed against a BLOCK review (D-015); re-review pending, and its box stays unticked until
 that returns PASS. Items 11 and 12 were opened by the reviews of item 1; item 13 by item 2's.
 
@@ -121,24 +123,40 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
 - [ ] **3. S-001 has no evidence artifact, and its deliverable refuses to hold one.**
       `03-QUALITY.md` DoD 2 requires verify.sh output on record; `docs/DEMO.md` says "no
       command output is pasted here". Resolve the contradiction, then record the red-CI run.
-- [ ] **4. `04-PLAN.md:86` and `:98` still order the D-007/D-008 mechanisms built** —
-      the single-instance assertion and startup listener precondition D-012 calls actively
-      misleading. Also `05-BACKLOG.md:165`. Point them at D-012.
-- [ ] **5. `01-DESIGN.md` presents superseded decisions as current** — `:269` still names
-      Koyeb; `:156/:212/:213` still specify freshness in `/health` polled every 15 minutes,
-      the opposite of the shipped code and of D-009. No `/ready` row in its API table.
-- [ ] **6. S-003's third criterion depends on Sprint 2 work** — `05-BACKLOG.md:52` needs
-      "the standard error shape", defined at `:151` in Sprint 2. Same defect S-005 was
-      deferred for. Also `/ready` returns `status="ok"` while nothing is configured.
-- [ ] **7. S-005's deferral has no decision entry**, and this file contradicted the backlog
-      about it. D-011's precedent requires one for a MUST story leaving a sprint.
+- [x] **4. Stale D-007/D-008 orders.** Closed 2026-07-29. `04-PLAN.md` Sprint 2 and Sprint 3
+      now order D-012's database-backed rate limiting and transactional outbox, and the risk
+      table distinguishes D-007's *principle* (which stands) from its mechanism (superseded).
+      `05-BACKLOG.md`'s listener criterion now names the outbox. **Unreviewed** — factual
+      correction made while `work-breaker` was unavailable, per D-016 rule 2.
+- [x] **5. `01-DESIGN.md` presented superseded decisions as current.** Closed 2026-07-29.
+      Now names Vercel and points at D-010 and D-012; the API table carries a `/ready` row;
+      freshness moved from `/health` to `/ready`; the uptime-check row says why the monitor
+      must never poll `/ready`. **Unreviewed**, per D-016 rule 2.
+- [x] **6. S-003's third criterion depended on Sprint 2 work.** Closed 2026-07-29 and it is
+      the first application of **D-016 rule 1**: the error *shape* is deferred to Sprint 2
+      where it is defined once, and the criterion keeps only what Sprint 0 can meet.
+      `/ready` no longer returns `"ok"` while nothing is configured — it returns
+      `not_configured`, because `"ok"` with every other field null is indistinguishable to a
+      caller from a healthy database with no observations yet, and an orchestrator would
+      route traffic to it. Test added. **Unreviewed**, per D-016 rule 2.
+- [x] **7. S-005's deferral had no decision entry.** Closed 2026-07-29 as **D-017**, which
+      also records the gate change in item 11. **Unreviewed**, per D-016 rule 2.
 - [ ] **8. No Sprint 0 boundary retro.** `docs/10-FRICTION.md`'s latest entry closes one
       cost finding. Nothing records the S-005 deferral, the phase correction, D-012, D-013,
       or why S-003 and S-004 close partial. Run `retro-scribe`.
 - [ ] **9. Cold start is unestablished.** `audit/COLD-START.txt` records the attempt and the
       method that would settle it: read Vercel's runtime logs for the cold-start flag on the
       request id rather than inferring from latency.
-- [ ] **10. Smaller confirmed contradictions.** `docker-compose.yml:3` claims PostgreSQL
+- [x] **10. Smaller confirmed contradictions.** Closed 2026-07-29. `docker-compose.yml` no
+      longer claims to be "pinned to exactly what Neon runs" — the tag pins the major line and
+      ships 18.1 against Neon's observed 18.4. `api/vercel.json` carries the note that `./`
+      resolves to the Root Directory, so the string the friction log recorded testing was
+      never what shipped. `03-QUALITY.md`'s "unit + integration" claim is now true rather than
+      corrected, because item 13 made CI run them. `04-PLAN.md` says Vercel.
+      `db/session.py`'s pooling assertion is now **enforced**: a validator rejects an unpooled
+      URL in production, with three tests — D-010 makes pooling mandatory, and an unpooled URL
+      fails sporadically under concurrency rather than at startup. **Unreviewed**, per D-016
+      rule 2. Original finding follows. `docker-compose.yml:3` claims PostgreSQL
       18.4 pinned to Neon; preflight observes 18.1. `api/vercel.json` ships
       `git diff --quiet HEAD^ HEAD ./` while the friction log records testing `-- api/` —
       cwd-dependent, and not the string that was tested. `api/app/db/session.py:6` asserts
@@ -146,7 +164,13 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       three lines; precedent at `core/config.py:45`). `03-QUALITY.md:51` claims CI runs
       integration tests; CI provisions no database. `04-PLAN.md:46` still says Koyeb.
 
-- [ ] **13. The reversibility harness is inert where the gate is actually enforced.**
+- [x] **13. The reversibility harness was inert where the gate is actually enforced.**
+      Closed 2026-07-29. `.github/workflows/ci.yml` provisions the test database as a service
+      container on the same image and tag as `docker-compose.yml`. **Verified against the real
+      run, not the config:** run `30493278207` reported `42 passed, 1 xfailed` with **zero
+      skips**, byte-identical to local. The header now also names the divergence that remains
+      — `PREEMPT_DATABASE_URL` is unset in CI, so the same-database guard is exercised only
+      locally. Original finding follows.
       Opened by the review of item 2. `.github/workflows/ci.yml` has no `services:` block and
       never sets `PREEMPT_TEST_DATABASE_URL`, so in CI the eleven integration tests skip and
       `verify.sh` still reports `PASS pytest`. Reproduce with
@@ -167,7 +191,11 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       the list is what is known rather than a bound. Do not spend further rounds hunting
       shapes unless one is found in a `preflight.sh` anyone would actually write.
 
-- [ ] **11. `DOC_PHASES` in `scripts/verify.sh` has drifted from the template's.** The
+- [x] **11. `DOC_PHASES` in `scripts/verify.sh` had drifted from the template's.** Closed
+      2026-07-29, recorded in D-017. Both rows added; `docs/SERVICES.md` now appears in
+      section 1 and passes, and the friction log becomes due at phase 5. Verified by running
+      the gate, not assumed. **Unreviewed**, per D-016 rule 2.
+      Original finding follows. The
       template lists `2:docs/SERVICES.md` and `5:docs/10-FRICTION.md`; preempt's lists
       neither, so `docs/SERVICES.md` is never placeholder-scanned or length-checked by §1
       even though §4 depends on it entirely. Pre-existing, found by the review of item 1 and

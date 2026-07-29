@@ -850,3 +850,26 @@ the ratio is the lesson for the next criterion, not an argument for deleting wor
 already paid for and green. It also does not lower the standard for code that exists —
 S-010's schema, when it lands, is covered by the harness that is already there, which is
 the one part of that investment that pays back.
+
+## D-017 — S-005 is deferred into Sprint 1, and the gate checks the two documents it forgot
+
+- **Date:** 2026-07-29
+- **Status:** Accepted
+- **Required by** D-011's precedent: a MUST story leaving a sprint is a decision, not a
+  scheduling note. `05-BACKLOG.md` and `STATUS.md` had disagreed about this one, which is
+  what a missing entry looks like from the outside.
+
+**S-005 — seed script.** Its acceptance criterion is "runs against an empty database
+without error". Sprint 0 has no tables; the baseline migration creates none. A seed script
+written now would either seed nothing — passing a criterion that asserts nothing — or invent
+the schema S-010 is supposed to design, which `CLAUDE.md` forbids. It moves to Sprint 1
+beside the schema it seeds, and Sprint 0 closes without it. This is the same shape as
+S-003's error-shape criterion and is now covered generally by D-016 rule 1.
+
+**And the gate change, recorded here because D-011 requires that too.** `DOC_PHASES` in
+`scripts/verify.sh` had drifted from the template's: it listed neither
+`2:docs/SERVICES.md` nor `5:docs/10-FRICTION.md`. So the process record that section 4
+depends on entirely was never placeholder-scanned or length-checked, and the friction log
+would not be checked at the phase it becomes due. Both rows are added. This is a
+consequence of the gate being copied from a template and then edited in place — the drift
+is invisible unless someone diffs the two, and nothing does.

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 
 client = TestClient(app)
@@ -44,6 +45,21 @@ def test_ready_reports_freshness_as_none_not_zero() -> None:
     body = client.get("/api/v1/ready").json()
     assert body["observation_age_seconds"] is None
     assert body["observation_age_seconds"] != 0
+
+
+def test_ready_does_not_claim_ok_while_nothing_is_configured() -> None:
+    """A readiness probe that says "ok" before it is ready is worse than one that errors.
+
+    `/ready` returned `status="ok"` with every other field `None`, which is
+    indistinguishable from a configured database that simply has no observations yet — so
+    an orchestrator would route traffic to a service with no database at all.
+    """
+    body = client.get("/api/v1/ready").json()
+    if not settings.database_url:
+        assert body["status"] == "not_configured", (
+            f"no database is configured, so /ready must say so; got {body['status']!r}"
+        )
+        assert body["database"] is None
 
 
 def test_cadence_is_reported_so_a_monitor_can_derive_staleness() -> None:

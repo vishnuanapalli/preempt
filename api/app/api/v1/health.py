@@ -74,9 +74,23 @@ async def health() -> HealthResponse:
 
 @router.get("/ready", response_model=ReadyResponse)
 async def ready() -> ReadyResponse:
-    """Readiness and ingestion freshness. Poll hourly at most — see the module docstring."""
+    """Readiness and ingestion freshness. Poll hourly at most — see the module docstring.
+
+    `status` reports what is true, which right now is that nothing is configured. It said
+    `"ok"` until 2026-07-29, which is the one answer a readiness probe must never give
+    while it is not ready: an orchestrator reading `"ok"` routes traffic here, and the
+    fields that would have said otherwise are all `None` — indistinguishable, to anything
+    reading them, from a database that is up and simply has no observations yet.
+    """
     # Sprint 0 has no database. These stay None rather than being invented, per the
     # standing rule: defer, don't manufacture state a later sprint will create.
+    if not settings.database_url:
+        return ReadyResponse(
+            status="not_configured",
+            database=None,
+            observation_age_seconds=None,
+            stale=None,
+        )
     return ReadyResponse(
         status="ok",
         database=None,

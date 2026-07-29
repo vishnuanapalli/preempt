@@ -62,7 +62,14 @@ never-ship list.
 
 - [ ] `GET /api/v1/health` returns liveness, database reachability, and the age of the newest observation
 - [ ] Freshness is null, not zero, when no observation exists
-- [ ] Returns 503 when the database is unreachable, with the standard error shape
+- [ ] Returns 503 when the database is unreachable. **The error *shape* is deferred to
+      Sprint 2**, where `S-020` defines one shape for every route — this criterion cannot
+      be met before the thing it references exists, which is the same defect S-005 was
+      deferred for and the case D-016 rule 1 now covers. Until then: 503 with a body, and
+      the shape is settled once, in one place
+- [ ] `/ready` reports `not_configured` rather than `ok` while no database is configured.
+      A readiness probe that claims ok before it is ready is indistinguishable from a
+      healthy one with no data yet
 
 ### S-004 — Live on the public internet
 **MUST** · depends on S-003
