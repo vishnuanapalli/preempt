@@ -87,6 +87,14 @@ it, so it is the one part of this that can be silently lost.
 
 ## Open threads
 
+- **The test suite is bundled into the production function**, and neither documented
+  mechanism excludes it. Tried and verified not to work, so nobody repeats them:
+  `api/.vercelignore` with `tests/`, and `functions."app/main.py".excludeFiles` in
+  `vercel.json`. Both build fine and change nothing — `filePathMap` still lists all three
+  test files. The documented `excludeFiles` example targets the legacy `api/**/*.py`
+  layout, not the framework builder that emits a single `fastapi.func`. Left alone
+  deliberately: three small files inside a private bundle, not served publicly, and not
+  worth more cycles. Revisit only if the 500 MB bundle limit ever comes into play.
 - **S-004's acceptance criteria still say "Deployed to Koyeb."** D-010 chose Vercel and
   the backlog was never updated. The remaining five criteria are still the right ones;
   only the platform name is stale. Fix the wording when S-004 is closed, so the checklist

@@ -53,9 +53,15 @@ never-ship list.
 ### S-004 — Live on the public internet
 **MUST** · depends on S-003
 
-- [ ] Deployed to Koyeb; health endpoint answers over HTTPS from outside the network
-- [ ] External uptime monitor polls it every 15 minutes
-- [ ] Secrets set as platform environment variables; none in the repository
+- [x] Deployed to Vercel; health endpoint answers over HTTPS from outside the network
+      — `curl -si https://preempt-tau.vercel.app/api/v1/health` → `HTTP/2 200`, `43673c8`.
+      Platform was Koyeb when this was written; D-010 replaced it with Vercel.
+- [ ] External uptime monitor polls it every 15 minutes — poll `/health` only, never
+      `/ready`, which costs compute budget (D-009)
+- [ ] Secrets set as platform environment variables; none in the repository.
+      **Not done, and the live response proves it:** `/health` reports
+      `"environment":"local"` in production because no variables are set. Nothing reads
+      the database yet, so the app serves without them.
 - [ ] **Measured and recorded:** cold-start duration after one hour idle
 - [ ] **Measured and recorded:** CU-hours consumed in the first 24 hours, extrapolated to a month
 - [ ] If either measurement contradicts `01-DESIGN.md`, an ADR is written — not a silent adjustment
