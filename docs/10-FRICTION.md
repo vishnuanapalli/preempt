@@ -219,3 +219,22 @@ No padding found; nothing in it is unsupported by what is on disk. Two correctio
 `docs/SERVICES.md`, `docs/10-FRICTION.md`, `scripts/preflight.sh` and gate section 4 are all
 present in `~/Desktop/final project/_template`. The port carries the probe-check defect
 described at the top of this entry, so it is closed but not clean.
+
+---
+
+## 2026-07-29 — Cost finding closed
+
+`ignoreCommand` shipped in `e21262f`; 9 of the previous 10 commits would have been skipped.
+Verified by running the exact command against real commits before it shipped, both
+directions — `43673c8` (touched `api/`) exits 1 and builds, docs-only commits exit 0 and
+skip.
+
+Worth recording that the first test run was read wrong: `scripts/` and `docs/` sit at the
+repository root, not under `api/`, so commits reported as "should build" were correctly
+skipping. The command was right and the expectation was wrong — the same shape as ledger
+R5, caught this time because the exit codes were checked against named commits instead of
+assumed. → **Rule already exists (R5); this is evidence it works when actually applied.**
+
+Trade-off accepted: an empty commit can no longer force a redeploy, which was the technique
+used on `ad5913e` to pick up an environment variable. `npx vercel@latest redeploy` replaces
+it, recorded in STATUS.md under conventions rather than left to be rediscovered.
