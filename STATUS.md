@@ -76,6 +76,23 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
 - [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
       has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
       it proves nothing. Either a real baseline migration, or the claim comes down.
+      **Scoped 2026-07-29, not yet built.** This is the same shape as item 1 for the third
+      time — a check that cannot fail — and the useful question is not "is the migration
+      reversible" but "what would a round-trip that proves nothing look like, and does this
+      one look like that". It does: an empty migration reverses trivially.
+      Where it lives: `05-BACKLOG.md:43` is the unfalsifiable criterion, `04-PLAN.md:44`
+      repeats it, `DEMO.md:47` ships the round-trip as evidence, and no test in `api/tests/`
+      mentions alembic at all.
+      **Do not write a baseline with invented schema to satisfy it** — schema is Sprint 1
+      (S-006), and CLAUDE.md forbids inventing state an acceptance criterion assumes. The
+      deliverable is a *reversibility harness*: a test that applies each migration and
+      reverses it against the real test database on 5434, asserting the schema returns to
+      its prior state — and that is proven non-vacuous by running it against a deliberately
+      irreversible migration and showing it goes red. On today's empty baseline it should
+      report that there is nothing to prove, which is the honest result. It then becomes
+      load-bearing the moment Sprint 1 adds real tables.
+      Reword the criterion to what the harness actually establishes, rather than leaving a
+      sentence that an empty migration satisfies.
 - [ ] **3. S-001 has no evidence artifact, and its deliverable refuses to hold one.**
       `03-QUALITY.md` DoD 2 requires verify.sh output on record; `docs/DEMO.md` says "no
       command output is pasted here". Resolve the contradiction, then record the red-CI run.
