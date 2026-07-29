@@ -60,7 +60,18 @@ PLACEHOLDERS=(
 # Both patterns are passed to grep with an explicit -e. SECRET_RE begins with a hyphen,
 # and without -e grep parses the pattern as an option cluster, silently matching nothing.
 ATTRIB_RE='co-authored-by:[[:space:]]*claude|generated with \[?claude|claude\.ai/code|anthropic'
-SECRET_RE='-----BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|ghp_[A-Za-z0-9]{30,}'
+SECRET_RE='-----BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|ghp_[A-Za-z0-9]{30,}|npg_[A-Za-z0-9]{16,}'
+
+# A database URL carrying a password against a real host.
+#
+# Plain ERE, no `grep -P`: BSD grep on macOS has no PCRE support, so a negative
+# lookahead matches nothing locally while working in CI — a gate that silently
+# disagrees with itself across environments is worse than no gate.
+#
+# Instead the host is required to contain a letter and a dot, which excludes
+# `localhost` (no dot) and `127.0.0.1` (no letters). Placeholder domains are filtered
+# out afterwards by line, not by pattern.
+DBURL_RE='postgres(ql)?(\+[a-z]+)?://[^:/ ]+:[^@/ ]+@[A-Za-z0-9-]*[A-Za-z][A-Za-z0-9-]*\.'
 
 # Source files on disk, independent of git. The tracked-file scans below are blind in a
 # directory that was never initialized, which is exactly the state a code-first start
@@ -180,6 +191,19 @@ else
     printf '%s\n' "$secrets" | sed 's/^/          /'
   else
     pass "no credential pattern in tracked files"
+  fi
+
+  # Reported by line, so documentation placeholders can be filtered without weakening
+  # the pattern itself.
+  dburls=$(git ls-files -z 2>/dev/null \
+    | xargs -0 grep -InIE -e "$DBURL_RE" 2>/dev/null \
+    | grep -vE 'example\.(com|org|net)|@db[:.]|USER:PASSWORD|user:password' \
+    | grep -v "^${SELF}:" || true)
+  if [ -n "$dburls" ]; then
+    bad "database URL with a password against a real host, in tracked files:"
+    printf '%s\n' "$dburls" | cut -c1-100 | sed 's/^/          /'
+  else
+    pass "no database credential in tracked files"
   fi
 fi
 

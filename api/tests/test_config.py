@@ -44,7 +44,13 @@ def test_cadence_floor_rejects_a_value_that_would_exhaust_the_compute_budget() -
 
 
 def test_no_credential_defaults() -> None:
-    """A committed development secret is never-ship #22."""
-    s = Settings()
+    """A committed development secret is never-ship #22.
+
+    `_env_file=None` matters: without it pydantic-settings loads the developer's local
+    .env, and the test passes or fails based on whatever happens to be on that machine
+    rather than on what the code declares. That is how a test ends up asserting
+    something other than what it claims to.
+    """
+    s = Settings(_env_file=None)
     assert s.api_key == ""
     assert s.database_url == ""

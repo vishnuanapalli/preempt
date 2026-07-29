@@ -1,16 +1,21 @@
 # Local development database.
 #
-# TimescaleDB is pinned to a version Neon's free tier also offers, so local and
-# production run the same extension major version. Compression is deliberately
-# unused anywhere in this project — Neon's free tier does not support it, and a
-# local-only capability would be a trap (D-003).
+# Pinned to exactly what Neon runs: PostgreSQL 18.4 with timescaledb 2.24.0
+# (verified by querying the live project's pg_available_extensions).
+#
+# The `-oss` variant is deliberate. Neon's free tier offers only the Apache-2
+# licensed subset of TimescaleDB — which is why compression is unavailable there.
+# The OSS image has the same restriction, so a licensed-only feature fails here on
+# a laptop rather than in production. Using the full image locally would let a
+# capability exist in development that cannot exist in production, which is the
+# most expensive kind of environment drift.
 #
 # `latest` is avoided on purpose: an image that silently changes underneath the
 # project turns a reproducible environment into an irreproducible one.
 
 services:
   db:
-    image: timescale/timescaledb:2.17.1-pg16
+    image: timescale/timescaledb:2.24.0-pg18-oss
     container_name: preempt-db
     environment:
       POSTGRES_USER: preempt
@@ -32,7 +37,7 @@ services:
   # the same database the demo ran on, destroying demo data and then breaking the
   # next backfill through orphaned rows. On Neon this role is filled by a branch.
   db-test:
-    image: timescale/timescaledb:2.17.1-pg16
+    image: timescale/timescaledb:2.24.0-pg18-oss
     container_name: preempt-db-test
     environment:
       POSTGRES_USER: preempt
