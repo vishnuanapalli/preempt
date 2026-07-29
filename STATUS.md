@@ -153,9 +153,21 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
 - [ ] **8. No Sprint 0 boundary retro.** `docs/10-FRICTION.md`'s latest entry closes one
       cost finding. Nothing records the S-005 deferral, the phase correction, D-012, D-013,
       or why S-003 and S-004 close partial. Run `retro-scribe`.
-- [ ] **9. Cold start is unestablished.** `audit/COLD-START.txt` records the attempt and the
-      method that would settle it: read Vercel's runtime logs for the cold-start flag on the
-      request id rather than inferring from latency.
+- [ ] **9. Cold start is unestablished — but the method is now right, and one confound is
+      gone.** Second attempt 2026-07-29, `audit/COLD-START.txt` rewritten.
+      **The recorded method was wrong:** Vercel's runtime logs expose no cold-start flag.
+      They give timestamp, path, status, deployment, branch and `cache` state — nothing more.
+      Anyone following the old instruction wastes the trip.
+      **What they do give is better:** every client's requests, not just ours. Measured
+      1.689 s against 0.266 s, both `cache=MISS`, so the CDN served neither and the function
+      ran both times — the cache-hit confound is eliminated by evidence rather than argument.
+      **And then the logs overturned the measurement.** Something hit `/` at 21:01:05, so the
+      true idle window was 46 min 37 s, not the ~72 min this session inferred from its own
+      request history. Under the hour the criterion names, so the box stays unticked. That is
+      the confound the previous entry predicted, caught by measuring instead of reasoning.
+      **To close:** confirm ≥60 min with no request from *any* client in the logs, then
+      measure — and do not run `scripts/preflight.sh` during the window, because
+      `vercel:health` resets the clock.
 - [x] **10. Smaller confirmed contradictions.** Closed 2026-07-29. `docker-compose.yml` no
       longer claims to be "pinned to exactly what Neon runs" — the tag pins the major line and
       ships 18.1 against Neon's observed 18.4. `api/vercel.json` carries the note that `./`

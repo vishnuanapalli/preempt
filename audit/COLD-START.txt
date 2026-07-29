@@ -1,57 +1,81 @@
-Cold-start attempt — 2026-07-29
-================================
+Cold-start measurement — 2026-07-29, second attempt
+===================================================
 
-WHAT THIS IS: first-request latency after an idle window. It is NOT a confirmed
-cold start. See "What this does not establish" below before citing it.
+WHAT THIS IS: progress on S-004's "measured and recorded: cold-start duration after one
+hour idle". The criterion is still NOT met, but for a different and much narrower reason
+than last time, and one confound is now eliminated rather than assumed away.
 
-Invocation (run as a background monitor so no other request from this client
-intervened during the idle window):
+The first attempt (recorded here previously) measured 400 ms cold against 231 ms warm after
+a 65-minute wait and could not establish that anything had gone cold. It named the method
+that would settle it: "read Vercel's runtime logs for the cold-start flag on the request id
+rather than inferring from latency." **That method does not exist as described** — see
+"What the logs actually give you" below.
 
-    /bin/sleep 3900                                   # 65 minutes, no requests from here
-    U="https://preempt-tau.vercel.app/api/v1/health"
-    S=$(date +%s)
-    curl -s -o /dev/null \
-      -w '%{http_code} total=%{time_total}s ttfb=%{time_starttransfer}s connect=%{time_connect}s' \
-      "$U?cb=$S"                                      # measurement 1 — "cold"
-    curl -s -o /dev/null \
-      -w '%{http_code} total=%{time_total}s ttfb=%{time_starttransfer}s' \
-      "$U?cb=$S-w"                                    # measurement 2 — warm, immediately after
 
-Result:
+Measurement
+-----------
 
-    COLD START after 65 min idle: 200 total=0.400128s ttfb=0.398029s connect=0.055514s
-    WARM immediately after:       200 total=0.231227s ttfb=0.231047s
+    CB=$(date +%s); U="https://preempt-tau.vercel.app/api/v1/health"
+    curl -s -o /dev/null -w 'total=%{time_total}s ttfb=%{time_starttransfer}s connect=%{time_connect}s\n' "$U?cb=$CB"
+    curl -s -o /dev/null -w 'total=%{time_total}s ttfb=%{time_starttransfer}s\n' "$U?cb=$CB-warm"
 
-Delta: 0.400 - 0.231 = 0.169 s
+    req1  code=200  total=1.689253s  ttfb=1.689067s  connect=0.048149s
+    req2  code=200  total=0.265738s  ttfb=0.265590s
 
-What this does not establish
-----------------------------
-1. That the instance was ever cold. Nothing here proves Vercel evicted it during
-   the 65 minutes. The idle window is only "no requests FROM THIS CLIENT" — the
-   URL is public and any other traffic resets it.
+A 1.42 s gap. That is an order of magnitude larger than the first attempt's 169 ms, and it
+lands inside D-010's predicted 1–2 s rather than contradicting it.
 
-2. A 0.169 s gap is small for a Python cold start, which is the first reason to
-   doubt the label.
 
-3. The second and stronger reason: D-010 (docs/02-DECISIONS.md) predicts a 1-2 s
-   cold start. Measuring 0.400 s is 2.5-5x FASTER than predicted. That is better
-   read as evidence the experiment did not run than as evidence of a fast cold
-   start. An earlier version of the backlog entry read it as beating the design;
-   that reading was wrong and is corrected here.
+What the logs actually give you
+-------------------------------
 
-   (Note also: the 1-2 s figure is D-010's. docs/01-DESIGN.md carries a ~5 s
-   cold-start number, and that one belongs to Koyeb — a platform D-010 replaced
-   and that document still names.)
+Vercel's runtime logs, read through the MCP interface, do **not** expose a cold-start flag.
+Per request they give: timestamp, method, path, status, level, source, deployment id,
+branch, and `cache` state. No `coldStart`, no init duration. So the method this file
+recorded a day ago cannot be followed as written, and anyone who tries will waste the trip.
 
-The defensible claim, and the only one that should be cited:
+What they do give is better than a latency comparison: **the request history of every
+client, not just this one.** Both requests above show `cache=MISS`, so the CDN served
+neither and the function executed both times — which eliminates the confound that mattered
+most, that the fast second request was simply a cache hit.
 
-    After 65 minutes with no request from this client, the first request
-    returned HTTP 200 in 400 ms.
 
-That is a LOWER BOUND on a true cold start, not a measurement of one.
+And then the logs overturned the measurement
+--------------------------------------------
 
-How to actually establish it
-----------------------------
-Vercel reports whether an invocation was a cold start in its runtime logs. Read
-those for the request id returned in the x-vercel-id header rather than inferring
-from latency. Until that is done, S-004's cold-start criterion stays open.
+The reason the criterion is still unmet. Requests in the three hours before the measurement:
+
+    21:47:44  GET /api/v1/health   200  cache=MISS     <- req2 (warm)
+    21:47:42  GET /api/v1/health   200  cache=MISS     <- req1 (the "cold" one)
+    21:01:05  GET /favicon.png     404  cache=MISS
+    21:01:05  GET /favicon.ico     404  cache=MISS
+    21:01:03  GET /                404  cache=MISS
+    (nothing else in the window)
+
+The last request before the measurement was at **21:01:05**, not the 20:35 preflight run
+this session assumed from its own history. Someone — a browser, a crawler, something with a
+favicon request — hit the deployment at 21:01. The true idle window was therefore
+
+    21:01:05 → 21:47:42  =  46 min 37 s
+
+**Under the hour the criterion requires.** The 1.42 s gap is a real measurement of
+something; it is not a measurement of a one-hour-idle cold start, and the box stays
+unticked. This is exactly the failure mode the previous entry named — "the idle window only
+means 'no request from this client', and the URL is public" — except that this time it was
+measured instead of reasoned about, and it was the measurement that caught it.
+
+
+What closes this
+----------------
+
+1. Read the runtime logs and confirm **no request from any client** for ≥ 60 minutes. That
+   is now the load-bearing step, and it is the one the old method omitted.
+2. Only then measure, two requests, cache-busted.
+3. Do not run `scripts/preflight.sh` during the quiet window — `vercel:health` and
+   `vercel:routing` both hit the deployment and reset the clock. That is a real trap: the
+   probe that proves the service is up is also the thing that prevents measuring what
+   happens when it is left alone.
+
+Not established either way: whether the instance was actually evicted at any point, since
+no flag is available; and CU-hours consumed, which is the separate S-004 criterion and needs
+the Vercel usage view rather than logs.
