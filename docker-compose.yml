@@ -1,0 +1,52 @@
+# Local development database.
+#
+# TimescaleDB is pinned to a version Neon's free tier also offers, so local and
+# production run the same extension major version. Compression is deliberately
+# unused anywhere in this project — Neon's free tier does not support it, and a
+# local-only capability would be a trap (D-003).
+#
+# `latest` is avoided on purpose: an image that silently changes underneath the
+# project turns a reproducible environment into an irreproducible one.
+
+services:
+  db:
+    image: timescale/timescaledb:2.17.1-pg16
+    container_name: preempt-db
+    environment:
+      POSTGRES_USER: preempt
+      POSTGRES_PASSWORD: preempt_local_only
+      POSTGRES_DB: preempt
+    ports:
+      - "5433:5432"   # 5433 to avoid colliding with any local Postgres on 5432
+    volumes:
+      - preempt-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U preempt -d preempt"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Integration tests get their own database, never the dev one.
+  #
+  # This is not a preference. In prior work in this domain a test fixture truncated
+  # the same database the demo ran on, destroying demo data and then breaking the
+  # next backfill through orphaned rows. On Neon this role is filled by a branch.
+  db-test:
+    image: timescale/timescaledb:2.17.1-pg16
+    container_name: preempt-db-test
+    environment:
+      POSTGRES_USER: preempt
+      POSTGRES_PASSWORD: preempt_local_only
+      POSTGRES_DB: preempt_test
+    ports:
+      - "5434:5432"
+    tmpfs:
+      - /var/lib/postgresql/data   # ephemeral: tests must never depend on prior state
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U preempt -d preempt_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  preempt-db-data:
