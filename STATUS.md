@@ -16,41 +16,48 @@ in progress.
 | S-001 gate is real and runs in CI | **Done.** Verified by injecting a defect and watching CI go red |
 | S-002 database provisioned, migrations reversible | **Done.** upgrade → downgrade → upgrade against real Postgres |
 | S-003 health endpoint reporting freshness | **Partial.** `/health` and `/ready` split per D-009; `/ready` still returns nulls because no tables exist yet |
-| S-004 live on the public internet | **Blocked — deploys but does not serve.** See below |
+| S-004 live on the public internet | **Partial.** Serving over HTTPS since `43673c8`; one of six acceptance criteria met — see below |
 | S-005 seed script | **Not started** |
 
-## The Vercel problem — start here on resume
+## The Vercel problem — resolved 2026-07-28 in `43673c8`
 
-The project deploys and reports `READY`, and every route returns `404`. The badge is
-meaningless; the app is not being served.
+The app now serves. Kept here because the diagnosis is the useful part.
+
+```
+$ curl -si https://preempt-tau.vercel.app/api/v1/health | head -1
+HTTP/2 200
+{"status":"ok","environment":"local","ingest_interval_seconds":1800}
+```
 
 - Project: `preempt`, team `vishnus-projects-2166f0a0` (`prj_Brjcgy18oF1blb2WsULftvbE6JZK`)
-- URL to test: `https://preempt-tau.vercel.app/api/v1/health`
-- Repo is **public**, so no auth is needed to reproduce.
+- `/api/v1/health` and `/api/v1/ready` return 200; `/docs` renders; an unknown route
+  returns FastAPI's `{"detail":"Not Found"}` rather than a platform 404, which is what
+  distinguishes "the app is serving" from "the CDN answered."
 
-**Already tried, all still 404:**
+**Root cause.** No function was ever built. With Root Directory `api` and no framework
+preset, Vercel classified the project as a *static site*: it copied every `.py` file into
+`.vercel/output/static` and emitted a single catch-all 404 route. `[tool.vercel]
+entrypoint` was never consulted, because no Python builder ran to read it. The fix is
+`api/vercel.json` declaring `"framework": "fastapi"`, which produces output identical to
+setting the preset in project settings but lives in the repo.
 
-1. Deployment Protection disabled (it was returning 302 to `vercel.com/sso-api`).
-2. Root Directory set to `api` and saved; redeployed.
-3. `[tool.vercel] entrypoint = "app.main:app"` added to `api/pyproject.toml`.
+**Two things the earlier notes got wrong**, both worth remembering:
 
-**The tell:** every deployment reports `lambdaRuntimeStats: {"python": 2}` — unchanged
-across all three attempts. Vercel is building the *same two* functions regardless of
-configuration, and neither is our app. Find out what those two are before changing
-anything else; the answer is in the build log, not in more configuration.
+- "Dependencies never install" was the leading hypothesis and was false. The build log
+  showed `uv` resolving `uv.lock` successfully all along.
+- `{"python": 2}` was recorded as *unchanged across all three attempts*. It was not: the
+  third deployment reported no `lambdaRuntimeStats` at all. Reading it as unchanged
+  merged two different failures into one and pointed the investigation at configuration
+  syntax instead of at builder selection.
 
-**Untested hypotheses, cheapest first:**
+**What actually found it:** `vercel build` run locally against a copy of `api/`. It uses
+the same detection as the cloud, so the empty output directory was visible in seconds
+without a deploy cycle. Reach for that first next time. It needs a hand-written
+`.vercel/project.json` (`projectId`, `orgId`, `settings`) to skip the authenticated pull,
+and a `uv` at least as new as the one Vercel requires.
 
-- Dependencies may never install. The project uses `uv` with `pyproject.toml`; Vercel's
-  Python runtime historically wants `requirements.txt`. If FastAPI is absent at build
-  time the import fails and the route is never registered. Check the build log for the
-  install step — this is the most likely cause.
-- `[tool.vercel] entrypoint` may need a module path rather than `module:attr`.
-- Root Directory may not have applied to the deployment that ran; confirm against the
-  build log rather than the settings page.
-
-Use the Vercel MCP tools (`get_deployment_build_logs`, `get_runtime_logs`) — they are
-authenticated and read the actual build output.
+**Still a dashboard setting:** Root Directory must remain `api`. The repo cannot express
+it, so it is the one part of this that can be silently lost.
 
 ## Environment
 
@@ -64,17 +71,26 @@ authenticated and read the actual build output.
 
 ## Next actions, in order
 
-1. **Deploy to Vercel** (S-004). Root directory `api/`, Python runtime. Set
-   `PREEMPT_DATABASE_URL` to the **pooled** Neon endpoint in Vercel's environment
-   variables — pooling is mandatory under D-010, not optional.
-2. **Measure and record** cold-start duration after an hour idle, and CU-hours consumed
+1. **Set the environment variables** (S-004). Production currently answers
+   `"environment":"local"`, because none are set — that is the live proof they are
+   missing. Needs `PREEMPT_ENVIRONMENT=production` and `PREEMPT_DATABASE_URL` pointed at
+   the **pooled** Neon endpoint; pooling is mandatory under D-010, not optional. Nothing
+   reads the database yet, so the app serves without them — which is exactly how this
+   stays forgotten.
+2. **External uptime monitor** on `/api/v1/health` every 15 minutes (S-004). Poll only
+   `/health` — `/ready` costs compute budget, per D-009.
+3. **Measure and record** cold-start duration after an hour idle, and CU-hours consumed
    in the first 24 hours. `01-DESIGN.md` asserts these; if reality disagrees, that is an
    ADR, not a silent edit.
-3. **Seed script** (S-005), then close Sprint 0 with a demo and an adversarial review.
-4. Sprint 1: schema, simulator, Azure provider.
+4. **Seed script** (S-005), then close Sprint 0 with a demo and an adversarial review.
+5. Sprint 1: schema, simulator, Azure provider.
 
 ## Open threads
 
+- **S-004's acceptance criteria still say "Deployed to Koyeb."** D-010 chose Vercel and
+  the backlog was never updated. The remaining five criteria are still the right ones;
+  only the platform name is stale. Fix the wording when S-004 is closed, so the checklist
+  is not signed off against a platform this no longer uses.
 - **D-010 obsoleted parts of D-007 and D-008.** Rate limiting must move to the database
   and the delivery worker becomes a scheduled invocation. Neither is built yet — Sprint 3
   must not be started from the original wording of those two entries.

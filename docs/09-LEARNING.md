@@ -17,10 +17,20 @@ CI passed on a commit where the workflow never ran: `astral-sh/setup-uv@v9` does
 resolve, because that repository publishes `v9.0.0` with no moving `v9` major alias. The
 job failed at action resolution, before any step executed.
 
-Vercel reported a deployment `READY` and served `404` on every route. It had auto-detected
-two Python functions and built those; the FastAPI application at `api/app/main.py` was
-never deployed. Setting the root directory and declaring an explicit entrypoint did not
-fix it — the next deployment still reported `{"python": 2}`.
+Vercel reported a deployment `READY` and served `404` on every route. The FastAPI
+application at `api/app/main.py` was never deployed. Setting the root directory and
+declaring an explicit entrypoint did not fix it.
+
+*Corrected 2026-07-28, after the cause was found:* the first version of this entry said
+Vercel "auto-detected two Python functions and built those," and that the next deployment
+"still reported `{"python": 2}`." Both were wrong, and the second was wrong in a way that
+cost time — that deployment reported no `lambdaRuntimeStats` at all. Treating the signal
+as unchanged merged two distinct failures into one, and sent the investigation after
+entrypoint syntax when the builder was the thing to look at. The real cause: with Root
+Directory `api` and no framework preset, Vercel classified the project as a **static
+site**, copied every `.py` file into `.vercel/output/static`, and built **zero**
+functions. `[tool.vercel] entrypoint` was never read, because no Python builder ran.
+Fixed in `43673c8` by declaring `"framework": "fastapi"` in `api/vercel.json`.
 
 **Root cause**
 
@@ -107,3 +117,12 @@ version number is not enough when two environments differ in what they are *allo
   surface had a problem no amount of local verification would have found, and finding it
   earlier would have cost less.
 - Establish that a status source reports on the thing itself before trusting it even once.
+- Run the platform's own build locally before changing its configuration a second time.
+  `vercel build` uses the same detection as the cloud, so an empty output directory was
+  visible in seconds — after three deploy cycles had already been spent guessing at
+  configuration. The general rule: when a remote build misbehaves, get its build step
+  running locally before forming any more hypotheses about it.
+- Record a signal as *changed* or *unchanged* only after comparing the actual values. The
+  claim that `{"python": 2}` was unchanged across three deployments was never checked
+  against the third, and one wrong word in a status note redirected the whole
+  investigation.
