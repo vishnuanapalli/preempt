@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "fastapi",
+  "_comment_ignoreCommand": "`./` resolves to the Root Directory (api), not the repo root, so this skips any push that cannot change the deployed artifact. The friction log recorded testing `-- api/` instead; that string was never what shipped, and it would behave differently from the repo root.",
   "ignoreCommand": "git diff --quiet HEAD^ HEAD ./"
 }

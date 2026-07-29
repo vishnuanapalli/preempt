@@ -43,6 +43,30 @@ class Settings(BaseSettings):
     max_tracked_pools: int = Field(default=500, ge=1)
 
     @model_validator(mode="after")
+    def production_database_must_be_pooled(self) -> Settings:
+        """Refuse to start in production against an unpooled endpoint.
+
+        `app/db/session.py` sets `statement_cache_size=0` and explains it by asserting that
+        production connects through Neon's pooled endpoint. Nothing enforced that, so the
+        docstring was a claim about configuration rather than a property of it — and the
+        failure it guards against is the worst kind: not a startup error, but sporadic
+        `InvalidSQLStatementName` under concurrency, weeks later.
+
+        Pooling is mandatory under D-010, not a preference. Only checked when a URL is
+        actually set, so the current state — production running with no database
+        configured — is unaffected.
+        """
+        if self.environment == "production" and self.database_url:
+            if "-pooler" not in self.database_url:
+                raise ValueError(
+                    "PREEMPT_DATABASE_URL must use Neon's pooled endpoint in production "
+                    "(the host contains '-pooler'). Pooling is mandatory under D-010: the "
+                    "engine is configured for transaction pooling and an unpooled URL "
+                    "fails later, intermittently, under concurrency."
+                )
+        return self
+
+    @model_validator(mode="after")
     def test_database_must_differ(self) -> Settings:
         """Refuse to start if the test database is the application database.
 

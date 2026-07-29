@@ -48,7 +48,7 @@ Nothing merges red.
 | Secrets | no private key, cloud key id, or token pattern in a tracked file | yes |
 | Lint | ruff | yes |
 | Types | mypy | yes |
-| Tests | pytest, unit + integration | yes |
+| Tests | pytest, unit + integration — CI provisions the test database as a service container, so the integration tests run there and do not skip | yes |
 
 **The gate must actually run in CI.** This sounds too obvious to write down. It is the
 first item on the never-ship list because it is the failure that actually happened: the

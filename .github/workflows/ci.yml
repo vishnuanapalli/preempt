@@ -2,6 +2,13 @@ name: verify
 
 # CI runs exactly the same gate you run locally, so "green on my machine" and
 # "green in CI" cannot diverge.
+#
+# That claim was false between the reversibility harness landing and the `services:` block
+# below: thirteen tests skipped here and passed locally. What still differs, stated rather
+# than implied — `PREEMPT_DATABASE_URL` is unset in CI, so the guard that refuses to run
+# migrations against the application database has nothing to compare against and that path
+# is exercised only locally. Nothing reads the application database yet; revisit when
+# something does.
 
 # Quoted because YAML 1.1 parsers read a bare `on` as the boolean true.
 # GitHub's parser handles it either way; quoting keeps linters and tooling honest.
@@ -13,6 +20,38 @@ name: verify
 jobs:
   verify:
     runs-on: ubuntu-latest
+
+    # Without this the integration tests skip and the gate still reports PASS, which is the
+    # divergence the comment above says cannot happen. Thirteen tests — the migration round
+    # trip, the schema-class coverage, the skip check itself and the three sabotage
+    # migrations — were inert here on every push while being green locally, and a skip
+    # prints as a pass to anyone reading the summary line. See D-015 and D-016.
+    #
+    # Same image and tag as docker-compose.yml, so a capability cannot exist in one place
+    # and not the other. Port 5434 matches the local convention, so the connection string
+    # has the same shape in both.
+    services:
+      db-test:
+        image: timescale/timescaledb:2.24.0-pg18-oss
+        env:
+          POSTGRES_USER: preempt
+          POSTGRES_PASSWORD: preempt_ci_only
+          POSTGRES_DB: preempt_test
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U preempt -d preempt_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # `api/.env` is gitignored, so in CI settings come from here. Only the test database
+      # is set: PREEMPT_DATABASE_URL stays unset because nothing reads the application
+      # database yet, and setting it would make the "these are not the same database"
+      # check compare against a fiction.
+      PREEMPT_TEST_DATABASE_URL: postgresql+asyncpg://preempt:preempt_ci_only@localhost:5434/preempt_test
+
     steps:
       - uses: actions/checkout@v7
         with:

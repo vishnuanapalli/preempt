@@ -44,7 +44,8 @@ somewhere to land.
 - [ ] Baseline migration applied; reversibility established by a harness that compares the
       schema before and after, not by the round trip exiting 0 — see S-002 and D-015
 - [ ] Health endpoint reporting liveness and ingestion freshness
-- [ ] Deployed to Koyeb; the health endpoint answers over the public internet
+- [ ] Deployed to **Vercel** (D-010 replaced Koyeb); the health endpoint answers over the
+      public internet
 - [ ] External uptime monitor pointed at it
 - [ ] `.env.example` lists every variable the app reads
 - [ ] Seed script skeleton — the file exists and runs, even if it seeds nothing yet
@@ -84,7 +85,9 @@ labelled; row count is inside budget.
 - [ ] Cross-provider normalisation, with the comparison basis stated in the response
 - [ ] Provenance on every price-bearing response; `mixed` where a comparison spans sources
 - [ ] One error shape across every route
-- [ ] API key auth on writes; rate limiting with the single-instance assertion from D-007
+- [ ] API key auth on writes; rate limiting per **D-012** — database-backed, because the
+      single-instance assertion D-007 specified cannot hold on a serverless platform.
+      D-012 also leaves the per-request database cost unmeasured against D-002's budget
 - [ ] OpenAPI document generated; TypeScript types generated from it with a CI drift gate
 
 **Demo:** a `curl` answers "cheapest 8 vCPU / 32 GB machine across three clouds," and the
@@ -96,7 +99,9 @@ response says which numbers are real.
 
 - [ ] Subscription model, typed rules, CRUD behind an API key
 - [ ] Evaluation on the ingest event; crossing detection, not polling
-- [ ] Listener registration enforced at startup per D-008, with a test that ingest fails loudly without it
+- [ ] Delivery guaranteed by the **D-012** transactional outbox, not by D-008's startup
+      listener precondition — there is no long-lived process to register with. A test
+      still proves ingest fails loudly when the outbox cannot be written
 - [ ] Outbox with `FOR UPDATE SKIP LOCKED`; claim commits before any network call
 - [ ] Retry with capped exponential backoff and jitter; dead-letter at the cap
 - [ ] Idempotency key enforced by a database constraint, not only in application code
@@ -166,7 +171,7 @@ The one deliberate inversion is deployment, which comes first for the reasons ab
 | Cold start worse than ~5s | Sprint 0 measurement | Interface absorbs it, or move to a provider with a longer idle window |
 | Azure changes its response shape mid-build | Normalisation test fails | Simulated providers keep working; that provider degrades alone |
 | Scheduled job unreliable or disabled by inactivity | Freshness ages in `/health` | Switch scheduler; the 30-minute cadence tolerates delay |
-| Ported code carries an assumption from a system that was never hosted | Review | D-007 is the general fix: assert assumptions, do not inherit justifications |
+| Ported code carries an assumption from a system that was never hosted | Review | D-007's principle is the fix — assert assumptions, do not inherit justifications. Its *mechanism* was superseded by D-012 when the platform changed, which is the same lesson one level up |
 
 ## Deferred
 

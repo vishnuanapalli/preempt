@@ -1,7 +1,11 @@
 # Local development database.
 #
-# Pinned to exactly what Neon runs: PostgreSQL 18.4 with timescaledb 2.24.0
-# (verified by querying the live project's pg_available_extensions).
+# Matched to Neon on major version and TimescaleDB version, NOT on patch. This tag ships
+# PostgreSQL 18.1; Neon was observed at 18.4, and timescaledb is 2.24.0 on both (the
+# extension version was verified by querying the live project's pg_available_extensions;
+# the patch difference has not been re-verified since). The image tag pins the major line,
+# so "pinned to exactly what Neon runs" — which this comment said until 2026-07-29 — was
+# never true of the patch number. `audit/PREFLIGHT.txt` records what is actually running.
 #
 # The `-oss` variant is deliberate. Neon's free tier offers only the Apache-2
 # licensed subset of TimescaleDB — which is why compression is unavailable there.

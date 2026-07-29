@@ -153,7 +153,8 @@ implementation. The OpenAPI document generated from these routes is the input to
 
 | Method | Path | Purpose | Auth |
 |--------|------|---------|------|
-| GET | `/api/v1/health` | Liveness, and whether ingestion is fresh | none |
+| GET | `/api/v1/health` | Liveness only — no database field, by D-009 | none |
+| GET | `/api/v1/ready` | Readiness: database reachability and the age of the newest observation | none |
 | GET | `/api/v1/instances` | Search pools by vCPU, memory, provider, region | none |
 | GET | `/api/v1/compare` | Cheapest equivalent per provider for a given size | none |
 | GET | `/api/v1/pools/{id}/history` | Price series over a window | none |
@@ -209,8 +210,8 @@ impossible here, and a database-read attacker is outside this threat model.
 |--------|-----|---------|
 | Structured logs to stdout | JSON lines, one per request | What happened, and in what order |
 | Request ID on every response | header, echoed into every log line | Which log lines belong to the request being complained about |
-| Freshness in `/health` | age of the newest observation | Whether ingestion silently stopped |
-| External uptime check | free monitor against `/health`, every 15 minutes | Whether the platform suspended the service overnight |
+| Freshness in `/ready` | age of the newest observation | Whether ingestion silently stopped |
+| External uptime check | free monitor against `/health` every 15 minutes — never `/ready`, which queries the database and so costs compute budget (D-009) | Whether the platform suspended the service overnight |
 
 **Deliberately out of scope:** metrics backend, distributed tracing, dashboards. One
 service, one database, one operator — these would add operational surface without
@@ -238,7 +239,7 @@ next backfill through leftover rows.
 
 | What fails | Detected by | Behaviour |
 |------------|-------------|-----------|
-| Azure API unreachable | ingestion error log; `/health` freshness ages | Azure pools keep their last value with an ageing `last_seen`; simulated providers continue |
+| Azure API unreachable | ingestion error log; `/ready` freshness ages | Azure pools keep their last value with an ageing `last_seen`; simulated providers continue |
 | Azure changes its response shape | normalisation raises on an unexpected field | That provider's ingest fails and is reported; the tick still commits the other two |
 | Scheduler misses a run | freshness exceeds two intervals | The next tick catches up; history shows a visible gap rather than interpolation |
 | Monthly database compute exhausted | queries fail outright | The failure the 30-minute cadence exists to prevent; the uptime monitor surfaces it |
@@ -266,8 +267,11 @@ The four questions left open in `00-PRD.md`, each now a decision-log entry.
    simulated, labelled per row. D-001.
 2. **Unit of risk — the pool.** Carried forward from prior work, with its evidence
    honestly qualified. D-004.
-3. **Where it runs — Koyeb, Neon, and an external scheduler.** Chosen on idle-suspension
-   and compute-budget numbers. D-002, D-003.
+3. **Where it runs — Vercel, Neon, and an external scheduler.** Chosen on idle-suspension
+   and compute-budget numbers. D-002, D-003 — **and D-010, which replaced Koyeb with
+   Vercel after Koyeb did not work in practice.** Going serverless invalidated the
+   mechanisms of D-007 and D-008, which D-012 replaced; the principles stand. Read D-010
+   and D-012 before treating anything in this section as current.
 4. **What carries over.** The delivery engine, the three-way prediction split, and the
    schema shape port across; cadence and storage strategy are new work, because the
    constraints are new. D-005.

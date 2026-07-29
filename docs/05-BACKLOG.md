@@ -194,7 +194,9 @@ Goal: an alert fires, is signed, arrives, and survives a dead receiver. Non-obvi
 - Idempotency enforced by a database constraint
 - `follow_redirects=False` passed **explicitly**, with a test that fails if it is removed — never-ship #8
 - Delivery described as at-least-once everywhere, never exactly-once — never-ship #2
-- Ingest with no registered listener fails loudly — D-008
+- Ingest fails loudly when the outbox cannot be written — **D-012**, which replaced
+  D-008's registered-listener precondition once there was no long-lived process to
+  register with
 - The evaluation query uses an index, proven by an execution plan, not by a docstring — never-ship #7
 
 ## Sprint 4 — Prediction

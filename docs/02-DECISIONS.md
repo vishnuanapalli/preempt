@@ -790,3 +790,63 @@ That gap is why the third sabotage shape seeds *rows* rather than schema — it 
 case the snapshot is blind to, and without it the re-application step was pinned by nothing
 and could be deleted with the suite staying green. The first run of the mutation matrix is
 what found that; it is recorded in `audit/REVERSIBILITY.txt` rather than quietly fixed.
+
+## D-016 — Verification is capped to the code it covers, and a missing reviewer narrows the work
+
+- **Date:** 2026-07-29
+- **Status:** Accepted. Decided by the owner after a diagnostic, not by an agent.
+- **Amends** D-013, which delegated the sprint go-ahead to the review agents but said
+  nothing about how much verification a finding may justify, or what happens when the
+  reviewer cannot be reached.
+
+**Context**
+
+Two facts prompted this, both measured rather than felt.
+
+The first is a ratio. Closing one Sprint 0 finding — S-002's vacuous reversibility
+criterion — produced 1,630 lines of verification machinery against an application of 262
+lines, to establish that a migration whose `upgrade()` and `downgrade()` are both `pass`
+can be reversed. Every finding that machinery fixed was real; the reviews that found them
+were correct. The ratio is still wrong. The work verified something that does not exist
+yet, and it did so at six times the size of everything that does.
+
+The second is convergence. Sprint 0's BLOCK list closed one item that day and opened three,
+from the reviews of the items being closed. It grew net two. A queue whose closures create
+more entries than they remove does not converge, and Sprint 0 is the sprint whose goal is
+"foundations and a live skeleton".
+
+Underneath both is the ledger's own open finding — *nothing measures process cost*. Without
+a budget, every review round is justified by the finding in front of it, and there is no
+point at which the answer is "this is proportionate, stop".
+
+**Decision**
+
+Two rules, one for scope and one for availability.
+
+1. **A BLOCK finding on an acceptance criterion for work that does not exist yet is
+   deferred to that work's story, not built now.** The finding is still recorded and still
+   correct — it moves to where the code it describes will live. Verification stays
+   proportionate to the code it covers, and "proportionate" means the reviewer may ask why
+   a check is larger than its subject and get an answer, not a justification per finding.
+   Sprint 0 closes on the items that gate real work.
+
+2. **When `work-breaker` cannot be reached, the loop narrows rather than halts.** It may
+   continue on factual document corrections and on configuration that carries a machine
+   check, recording each as unreviewed in `STATUS.md` and queueing it for review. It may
+   not tick an acceptance criterion, and it may not cross a sprint boundary, without a real
+   PASS. A self-review is not a substitute and is not to be recorded as one.
+
+**Why this is a decision and not a preference**
+
+It changes what "done" means, which D-011 established is a decision by definition, and it
+narrows a contract — D-013 — that an agent is not entitled to narrow on its own. The
+trigger was five consecutive `529 Overloaded` failures on the review agent, on two
+different models, which halted a session with a green gate and nothing to do.
+
+**What this does not do**
+
+It does not retract any finding already fixed. The reversibility harness stays as built;
+the ratio is the lesson for the next criterion, not an argument for deleting work that is
+already paid for and green. It also does not lower the standard for code that exists —
+S-010's schema, when it lands, is covered by the harness that is already there, which is
+the one part of that investment that pays back.

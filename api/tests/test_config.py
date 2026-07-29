@@ -43,6 +43,35 @@ def test_cadence_floor_rejects_a_value_that_would_exhaust_the_compute_budget() -
         Settings(ingest_interval_seconds=300)
 
 
+def test_production_rejects_an_unpooled_database_url() -> None:
+    """`db/session.py` explains `statement_cache_size=0` by asserting production is pooled.
+    Until this validator existed, that assertion was enforced by nothing — and an unpooled
+    URL does not fail at startup, it fails sporadically under concurrency weeks later."""
+    with pytest.raises(ValidationError, match="pooled endpoint"):
+        Settings(
+            environment="production",
+            database_url="postgresql+asyncpg://u:p@ep-x.example.com/preempt",
+        )
+
+
+def test_production_accepts_the_pooled_endpoint() -> None:
+    s = Settings(
+        environment="production",
+        database_url="postgresql+asyncpg://u:p@ep-x-pooler.example.com/preempt",
+    )
+    assert "-pooler" in s.database_url
+
+
+def test_local_is_not_required_to_be_pooled() -> None:
+    """Local Postgres has no pooler and needs none. A guard that fires everywhere gets
+    switched off everywhere."""
+    s = Settings(
+        environment="local",
+        database_url="postgresql+asyncpg://u:p@localhost:5433/preempt",
+    )
+    assert s.database_url.endswith("/preempt")
+
+
 def test_no_credential_defaults() -> None:
     """A committed development secret is never-ship #22.
 
