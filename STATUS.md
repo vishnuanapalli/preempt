@@ -16,8 +16,41 @@ in progress.
 | S-001 gate is real and runs in CI | **Done.** Verified by injecting a defect and watching CI go red |
 | S-002 database provisioned, migrations reversible | **Done.** upgrade → downgrade → upgrade against real Postgres |
 | S-003 health endpoint reporting freshness | **Partial.** `/health` and `/ready` split per D-009; `/ready` still returns nulls because no tables exist yet |
-| S-004 live on the public internet | **Not started.** Blocked on the Vercel deploy |
+| S-004 live on the public internet | **Blocked — deploys but does not serve.** See below |
 | S-005 seed script | **Not started** |
+
+## The Vercel problem — start here on resume
+
+The project deploys and reports `READY`, and every route returns `404`. The badge is
+meaningless; the app is not being served.
+
+- Project: `preempt`, team `vishnus-projects-2166f0a0` (`prj_Brjcgy18oF1blb2WsULftvbE6JZK`)
+- URL to test: `https://preempt-tau.vercel.app/api/v1/health`
+- Repo is **public**, so no auth is needed to reproduce.
+
+**Already tried, all still 404:**
+
+1. Deployment Protection disabled (it was returning 302 to `vercel.com/sso-api`).
+2. Root Directory set to `api` and saved; redeployed.
+3. `[tool.vercel] entrypoint = "app.main:app"` added to `api/pyproject.toml`.
+
+**The tell:** every deployment reports `lambdaRuntimeStats: {"python": 2}` — unchanged
+across all three attempts. Vercel is building the *same two* functions regardless of
+configuration, and neither is our app. Find out what those two are before changing
+anything else; the answer is in the build log, not in more configuration.
+
+**Untested hypotheses, cheapest first:**
+
+- Dependencies may never install. The project uses `uv` with `pyproject.toml`; Vercel's
+  Python runtime historically wants `requirements.txt`. If FastAPI is absent at build
+  time the import fails and the route is never registered. Check the build log for the
+  install step — this is the most likely cause.
+- `[tool.vercel] entrypoint` may need a module path rather than `module:attr`.
+- Root Directory may not have applied to the deployment that ran; confirm against the
+  build log rather than the settings page.
+
+Use the Vercel MCP tools (`get_deployment_build_logs`, `get_runtime_logs`) — they are
+authenticated and read the actual build output.
 
 ## Environment
 
