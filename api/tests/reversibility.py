@@ -47,6 +47,12 @@ than one that is absent, because a reader concludes it is covered.
   compression or retention policies. Whether a chunk table carries a `deptype='e'` row in
   `pg_depend`, and is therefore hidden by the extension filter, has not been established.
   It matters from S-010 onward and should be settled before the first hypertable.
+
+The extension filter is also not complete. A bare test database snapshots four objects, and
+one of them is `_timescaledb_catalog.metadata.metadata_insert_trigger` — a trigger the
+extension created that carries no `deptype='e'` row. It is harmless here because it is
+constant across every snapshot, so it can never produce a difference; it is recorded because
+"extension-owned objects are excluded" reads as complete and is not.
 """
 
 from __future__ import annotations

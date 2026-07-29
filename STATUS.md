@@ -81,7 +81,7 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       migration — apply, reverse, re-apply — before exercising the whole chain;
       `api/tests/test_reversibility.py` runs it on every gate invocation with three
       deliberately irreversible migrations, one per failure path;
-      `scripts/sabotage-reversibility.sh` breaks the harness seventeen ways by hand and
+      `scripts/sabotage-reversibility.sh` breaks the harness nineteen ways by hand and
       requires each to go red *by node id*. Evidence: `audit/REVERSIBILITY.txt`.
       **Coverage is zero and the harness says so.** The baseline creates nothing, so the
       round trip has nothing to reverse. The strict xfail on

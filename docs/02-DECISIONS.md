@@ -735,7 +735,7 @@ Four consequences, each deliberate:
   two as a crash, which reads as "the test is broken".
 - **Its failability is tested, not asserted.** Three sabotage migrations run on every gate
   invocation, one per failure path. Above them, `scripts/sabotage-reversibility.sh` breaks
-  the harness seventeen ways and requires each to turn the suite red **for the right
+  the harness nineteen ways and requires each to turn the suite red **for the right
   reason** — by node id, since a mutation that breaks the module import turns everything
   red and would satisfy a check that reads only the exit code — plus one comment-only edit
   that must leave it green.

@@ -154,6 +154,14 @@ run_case "NULL definitions accepted instead of raising" RED \
   's = s.replace("                    if identity is None or definition is None:", "                    if False:", 1)
 s = s.replace("               \x27kind=\x27 || c.relkind::text\n               || \x27 persistence=\x27", "               NULL || c.relkind::text\n               || \x27 persistence=\x27", 1)'
 
+# `public`, timescaledb and a timescaledb catalog trigger keep three classes non-empty in a
+# bare database, so a filter that excludes user-schema objects leaves the class present and
+# the class check satisfied. This mutation is invisible to it and must be caught by the
+# binding to the fixture's own identities.
+run_case "the schema query only ever sees public" RED \
+  "test_the_snapshot_sees_every_class_it_claims_to" \
+  's = s.replace("        SELECT n.nspname, \x27\x27\n        FROM pg_namespace n\n        WHERE n.nspname <> \x27information_schema\x27", "        SELECT n.nspname, \x27\x27\n        FROM pg_namespace n\n        WHERE n.nspname = \x27public\x27", 1)'
+
 run_case "same_database() calls every URL distinct" RED \
   "test_the_same_database_spelled_two_ways_is_detected" \
   's = s.replace("    left, right = make_url(a), make_url(b)", "    return False\n    left, right = make_url(a), make_url(b)", 1)'

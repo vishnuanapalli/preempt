@@ -78,9 +78,10 @@ that proved nothing looks exactly like a run that proved everything.
       ok     half the object classes deleted from the snapshot -> RED (via test_the_snapshot_declares_every_class_this_suite_pins)
       ok     a NULL component in a definition (guard must raise) -> RED (via test_the_snapshot_sees_every_class_it_claims_to)
       ok     NULL definitions accepted instead of raising -> RED (via test_the_snapshot_sees_every_class_it_claims_to)
+      ok     the schema query only ever sees public -> RED (via test_the_snapshot_sees_every_class_it_claims_to)
       ok     same_database() calls every URL distinct -> RED (via test_the_same_database_spelled_two_ways_is_detected)
       ok     comment-only edit (must stay green) -> GREEN
-
+    
     SABOTAGE: every case behaved as expected
 
 Each RED case names the node id that must be among the failures. Exit code alone is not
@@ -134,6 +135,16 @@ and the suite did not notice.
   f. **One mutation tested nothing.** Its pattern matched an identically-worded line in a
      different function, and it reported a hole that did not exist. The script now fails any
      case whose mutation matches nothing.
+
+  g. **Class presence was not the same as class coverage.** Three classes are non-empty in a
+     bare test database — `schema` from `public`, `extension` from timescaledb and plpgsql,
+     and `trigger` from `_timescaledb_catalog.metadata.metadata_insert_trigger`, which is not
+     extension-owned. For those three, the class-coverage test proved the query *ran*, not
+     that it saw the object the test had just created, so narrowing the schema query to
+     `WHERE n.nspname = 'public'` left the suite green. Found while chasing a line recovered
+     from an adversarial review that died mid-run to a transient API error. Closed by binding
+     every class except `extension` to an identity from the fixture's own schema; that
+     mutation is now case 18 and goes red.
 
 
 What this does not establish

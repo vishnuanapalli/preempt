@@ -448,6 +448,23 @@ def test_the_snapshot_sees_every_class_it_claims_to() -> None:
         "compose image.)"
     )
 
+    # Class presence alone is not enough. Three classes are non-empty in a bare test
+    # database — `schema` from `public`, `extension` from timescaledb and plpgsql, and
+    # `trigger` from a timescaledb catalog trigger that is not extension-owned. For those,
+    # "the class appeared" says the query ran, not that it saw the object this test made,
+    # so a filter that wrongly excluded a user-schema object would still pass. Every class
+    # is therefore bound to an identity the fixture actually created.
+    unbound = {
+        cls
+        for cls in EXPECTED_CLASSES - {"extension"}
+        if not any(c == cls and PROBE_SCHEMA in ident for c, ident, _ in observed.objects)
+    }
+    assert not unbound, (
+        f"class {sorted(unbound)} appeared in the snapshot, but none of its objects came "
+        f"from the {PROBE_SCHEMA!r} fixture — so the query is running without seeing what "
+        "this test created. 'extension' is exempt because nothing here creates one."
+    )
+
     # `text || NULL` is NULL, so one unguarded component erases a whole definition and
     # `str(None)` stores it as this exact string. Every object of that class then compares
     # equal to every other and the diff goes quiet. The harness raises on a NULL column;
