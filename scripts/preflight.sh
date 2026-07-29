@@ -5,6 +5,17 @@
 # not merely "ok". A probe that cannot fail is the same defect as a green badge that means
 # nothing, which is the failure this whole file exists to prevent.
 #
+# Every outcome names the probe it belongs to as its first argument, unquoted:
+#
+#     pass vercel:auth "vercel cli authenticated" "$who"
+#          ^^^^^^^^^^^ declared in the Probe column of docs/SERVICES.md
+#
+# That id is the binding between the manifest and this file, and it is checked both ways:
+# `scripts/check-probes.py --static` runs in the gate and requires every declared probe to
+# exist here; the verdict below requires every declared probe to have actually run. The
+# earlier arrangement matched service names against probe *labels*, which meant deleting
+# every Vercel probe still reported full coverage.
+#
 # A dependency that cannot be probed is either dropped or WAIVED here in writing, with a
 # reason and the condition that lifts the waiver. Silence is not an option the script offers.
 #
@@ -17,9 +28,24 @@ if [ -t 1 ]; then G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; N=$'\033[0m'
 else G=""; R=""; Y=""; N=""; fi
 
 fails=0
-pass()  { printf '  %sPASS%s  %-34s %s\n' "$G" "$N" "$1" "$2"; }
-fail()  { printf '  %sFAIL%s  %-34s %s\n' "$R" "$N" "$1" "$2"; fails=$((fails + 1)); }
-waive() { printf '  %sWAIVED%s %-34s %s\n' "$Y" "$N" "$1" "$2"; }
+
+# Outcomes record their probe id as well as printing it, so the verdict can assert that
+# every declared probe ran. A probe sitting in a branch nobody takes prints nothing and is
+# invisible to the static check — this is what catches that.
+SEEN=$(mktemp) || exit 1
+trap 'rm -f "$SEEN"' EXIT
+
+pass()  { printf '%s\n' "$1" >>"$SEEN"
+          printf '  %sPASS%s   %-23s %-30s %s\n' "$G" "$N" "$1" "$2" "$3"; }
+fail()  { printf '%s\n' "$1" >>"$SEEN"
+          printf '  %sFAIL%s   %-23s %-30s %s\n' "$R" "$N" "$1" "$2" "$3"
+          fails=$((fails + 1)); }
+# A waiver satisfies coverage and does not fail the run — that is what a waiver is for.
+# It is counted and named in the verdict because otherwise swapping a real probe for a
+# one-line `waive` is green in every check and silent: the cheapest way to fake this file.
+waive() { printf '%s\n' "$1" >>"$SEEN"
+          printf '  %sWAIVED%s %-23s %-30s %s\n' "$Y" "$N" "$1" "$2" "$3"
+          waived="${waived:-0}"; waived=$((waived + 1)); WAIVED_IDS="${WAIVED_IDS:-} $1"; }
 
 VERCEL="npx --yes vercel@latest"
 SCOPE="vishnus-projects-2166f0a0"
@@ -39,9 +65,9 @@ echo "1. Local toolchain"
 # real failures next to it get ignored too.
 v=$( (cd api && uv run python -c "import sys;print('.'.join(map(str,sys.version_info[:3])))" 2>/dev/null | tail -1) )
 case "$v" in
-  3.12.*) pass "project python 3.12" "$v (uv venv)" ;;
-  "")     fail "project python 3.12" "uv could not resolve an interpreter" ;;
-  *)      fail "project python 3.12" "found $v; pyproject requires >=3.12,<3.13" ;;
+  3.12.*) pass uv:python "project python 3.12" "$v (uv venv)" ;;
+  "")     fail uv:python "project python 3.12" "uv could not resolve an interpreter" ;;
+  *)      fail uv:python "project python 3.12" "found $v; pyproject requires >=3.12,<3.13" ;;
 esac
 
 # Vercel refuses to build with an older uv. The floor is a real blocker, not a preference:
@@ -50,24 +76,24 @@ UV_FLOOR="0.9.25"
 if command -v uv >/dev/null 2>&1; then
   uvv=$(uv --version 2>&1 | awk '{print $2}')
   if [ "$(printf '%s\n%s\n' "$UV_FLOOR" "$uvv" | sort -V | head -1)" = "$UV_FLOOR" ]; then
-    pass "uv >= $UV_FLOOR" "$uvv"
+    pass uv:version "uv >= $UV_FLOOR" "$uvv"
   else
-    fail "uv >= $UV_FLOOR" "found $uvv — too old for 'vercel build' locally"
+    fail uv:version "uv >= $UV_FLOOR" "found $uvv — too old for 'vercel build' locally"
   fi
 else
-  fail "uv >= $UV_FLOOR" "not installed"
+  fail uv:version "uv >= $UV_FLOOR" "not installed"
 fi
 
 if command -v docker >/dev/null 2>&1; then
-  pass "docker" "$(docker --version 2>&1 | awk '{print $3}' | tr -d ,)"
+  pass docker:engine "docker" "$(docker --version 2>&1 | awk '{print $3}' | tr -d ,)"
 else
-  fail "docker" "not installed — local database cannot start"
+  fail docker:engine "docker" "not installed — local database cannot start"
 fi
 
 if command -v npx >/dev/null 2>&1; then
-  pass "npx (runs vercel cli)" "node $(node --version 2>&1)"
+  pass vercel:npx "npx (runs vercel cli)" "node $(node --version 2>&1)"
 else
-  fail "npx (runs vercel cli)" "not installed — vercel cli is not installed globally"
+  fail vercel:npx "npx (runs vercel cli)" "not installed — vercel cli is not installed globally"
 fi
 
 # ------------------------------------------------------------------- 2. database
@@ -76,15 +102,18 @@ echo "2. Local database"
 
 if docker compose ps --status running 2>/dev/null | grep -q preempt-db; then
   pgv=$(docker compose exec -T db psql -U preempt -d preempt -tAc 'show server_version' 2>/dev/null | tr -d '[:space:]')
-  [ -n "$pgv" ] && pass "postgres reachable (5433)" "server_version $pgv" \
-                || fail "postgres reachable (5433)" "container up but psql did not answer"
+  [ -n "$pgv" ] && pass docker:postgres "postgres reachable (5433)" "server_version $pgv" \
+                || fail docker:postgres "postgres reachable (5433)" "container up but psql did not answer"
 
   ts=$(docker compose exec -T db psql -U preempt -d preempt -tAc \
        "select default_version from pg_available_extensions where name='timescaledb'" 2>/dev/null | tr -d '[:space:]')
-  [ -n "$ts" ] && pass "timescaledb available" "$ts" \
-               || fail "timescaledb available" "extension not offered by this image"
+  [ -n "$ts" ] && pass docker:timescaledb "timescaledb available" "$ts" \
+               || fail docker:timescaledb "timescaledb available" "extension not offered by this image"
 else
-  fail "postgres reachable (5433)" "container not running — 'docker compose up -d --wait'"
+  fail docker:postgres "postgres reachable (5433)" "container not running — 'docker compose up -d --wait'"
+  # Named explicitly rather than left unreported: with the container down this probe cannot
+  # run, and an unrun probe must still account for itself or the coverage check is a lie.
+  fail docker:timescaledb "timescaledb available" "not checked — container not running"
 fi
 
 # ------------------------------------------------------------------ 3. source host
@@ -92,9 +121,9 @@ echo
 echo "3. Source host"
 
 if git ls-remote --exit-code origin HEAD >/dev/null 2>&1; then
-  pass "github remote reachable" "$(git config --get remote.origin.url)"
+  pass github:remote "github remote reachable" "$(git config --get remote.origin.url)"
 else
-  fail "github remote reachable" "git ls-remote failed"
+  fail github:remote "github remote reachable" "git ls-remote failed"
 fi
 
 # ----------------------------------------------------------------------- 4. vercel
@@ -103,30 +132,30 @@ echo "4. Vercel"
 
 who=$($VERCEL whoami --scope "$SCOPE" </dev/null 2>/dev/null | tail -1 | tr -d '[:space:]')
 if [ -n "$who" ]; then
-  pass "vercel cli authenticated" "$who"
+  pass vercel:auth "vercel cli authenticated" "$who"
 else
-  fail "vercel cli authenticated" "whoami returned nothing — run 'npx vercel@latest login'"
+  fail vercel:auth "vercel cli authenticated" "whoami returned nothing — run 'npx vercel@latest login'"
 fi
 
 # Root Directory is a dashboard setting the repository cannot express, which makes it the
 # one part of the deployment that can be silently lost. Probe it rather than trust it.
 if [ -f .vercel/project.json ]; then
   rd=$(python3 -c "import json;print(json.load(open('.vercel/project.json')).get('settings',{}).get('rootDirectory'))" 2>/dev/null)
-  [ "$rd" = "api" ] && pass "vercel rootDirectory == api" "$rd" \
-                    || fail "vercel rootDirectory == api" "found '$rd' — build will produce no function"
+  [ "$rd" = "api" ] && pass vercel:rootdir "vercel rootDirectory == api" "$rd" \
+                    || fail vercel:rootdir "vercel rootDirectory == api" "found '$rd' — build will produce no function"
 else
-  fail "vercel rootDirectory == api" "not linked — run 'npx vercel@latest pull --yes --environment production'"
+  fail vercel:rootdir "vercel rootDirectory == api" "not linked — run 'npx vercel@latest pull --yes --environment production'"
 fi
 
 envs=$($VERCEL env ls --scope "$SCOPE" </dev/null 2>/dev/null)
 case "$envs" in
-  *PREEMPT_ENVIRONMENT*) pass "env PREEMPT_ENVIRONMENT set" "present (value not printed)" ;;
-  *)                     fail "env PREEMPT_ENVIRONMENT set" "missing — /health will report 'local' in production" ;;
+  *PREEMPT_ENVIRONMENT*) pass vercel:env-environment "env PREEMPT_ENVIRONMENT set" "present (value not printed)" ;;
+  *)                     fail vercel:env-environment "env PREEMPT_ENVIRONMENT set" "missing — /health will report 'local' in production" ;;
 esac
 
 case "$envs" in
-  *PREEMPT_DATABASE_URL*) pass "env PREEMPT_DATABASE_URL set" "present (value not printed)" ;;
-  *) waive "env PREEMPT_DATABASE_URL set" "not set; no code reads the database before Sprint 1. Waiver lifts when S-004 closes or the first query ships — whichever comes first." ;;
+  *PREEMPT_DATABASE_URL*) pass vercel:env-database "env PREEMPT_DATABASE_URL set" "present (value not printed)" ;;
+  *) waive vercel:env-database "env PREEMPT_DATABASE_URL set" "not set; no code reads the database before Sprint 1. Waiver lifts when S-004 closes or the first query ships — whichever comes first." ;;
 esac
 
 # ------------------------------------------------------------------- 5. deployed
@@ -137,25 +166,44 @@ code=$(curl -s -o /dev/null -w '%{http_code}' "$APP/api/v1/health?cb=$(date +%s)
 if [ "$code" = "200" ]; then
   env_reported=$(curl -s "$APP/api/v1/health?cb=$(date +%s)-e" 2>/dev/null \
                  | python3 -c "import json,sys;print(json.load(sys.stdin).get('environment'))" 2>/dev/null)
-  pass "GET /api/v1/health" "HTTP 200, environment=$env_reported"
-  [ "$env_reported" = "production" ] || fail "health reports production" "reports '$env_reported'"
+  if [ "$env_reported" = "production" ]; then
+    pass vercel:health "GET /api/v1/health" "HTTP 200, environment=$env_reported"
+  else
+    fail vercel:health "GET /api/v1/health" "HTTP 200 but environment=$env_reported, not production"
+  fi
 else
-  fail "GET /api/v1/health" "HTTP $code"
+  fail vercel:health "GET /api/v1/health" "HTTP $code"
 fi
 
 # The gate is green while every route 404s unless something checks the running system.
 # This probe is that check (ledger R2).
 body=$(curl -s "$APP/nope-$(date +%s)" 2>/dev/null)
 case "$body" in
-  *'"detail"'*) pass "unknown route served by app" "FastAPI 404, not a platform 404" ;;
-  *)            fail "unknown route served by app" "platform answered — app may not be routing" ;;
+  *'"detail"'*) pass vercel:routing "unknown route served by app" "FastAPI 404, not a platform 404" ;;
+  *)            fail vercel:routing "unknown route served by app" "platform answered — app may not be routing" ;;
 esac
 
 # ------------------------------------------------------------------- verdict
 echo
+
+# Coverage, not outcome: every probe docs/SERVICES.md declares must have reported
+# something above. A probe that exists in this file but never executes is invisible to the
+# gate's static check, and this is what sees it.
+if ! coverage=$(python3 scripts/check-probes.py --emitted "$SEEN" 2>&1); then
+  printf '%s\n' "$coverage" | sed 's/^/  COVERAGE  /'
+  fails=$((fails + 1))
+  echo
+fi
+
+waived="${waived:-0}"
+if [ "$waived" -gt 0 ]; then
+  printf '  %sWAIVED%s %d of the declared probes, so this run does not prove them:%s\n' \
+    "$Y" "$N" "$waived" "${WAIVED_IDS:-}"
+fi
+
 if [ "$fails" -eq 0 ]; then
-  printf '%sPREFLIGHT: PASS%s\n\n' "$G" "$N"
+  printf '%sPREFLIGHT: PASS%s (%d waived)\n\n' "$G" "$N" "$waived"
   exit 0
 fi
-printf '%sPREFLIGHT: FAIL (%d)%s\n\n' "$R" "$fails" "$N"
+printf '%sPREFLIGHT: FAIL (%d)%s (%d waived)\n\n' "$R" "$fails" "$N" "$waived"
 exit 1

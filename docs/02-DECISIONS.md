@@ -617,3 +617,59 @@ commit, and a boundary crossed wrongly is visible in the log rather than lost.
 hook's three-strike escape. The Stop hook's escape exists so a session cannot hard-lock a
 human out of their own machine. Nothing here is locked: a persistent BLOCK means the work
 is not done, and the correct response is to stop and say so.
+
+---
+
+## D-014 — The probe-coverage check binds to argument position, and its failability is gated
+
+**Date.** 2026-07-29. **Supersedes** the coverage mechanism described in D-011's
+enforcement note; D-011's rule — that a gate change is itself a decision — stands and is
+what requires this entry.
+
+**Context.** Section 4 of `scripts/verify.sh` claimed "every service in SERVICES.md has a
+probe." Three implementations of that claim have now existed. The first searched the whole
+of `preflight.sh` for the service name, so a comment satisfied it. The second searched only
+lines calling the outcome helpers, but still substring-matched the service name against the
+concatenated *label text* — so `Vercel` was satisfied by the label `"npx (runs vercel cli)"`
+and `Docker` by a postgres failure message. Deleting all four Vercel probes left the gate
+green, which was demonstrated before this change rather than argued. The same regex also
+excluded every probe written as a `case` arm or an `&&` chain, including the `waive` line,
+so the waiver mechanism the gate claimed to honour was invisible to it.
+
+**Decision.**
+
+1. Each row of `docs/SERVICES.md` declares its probes as machine-read `service:name` ids in
+   the Probe column. Each id must appear in `scripts/preflight.sh` as the **first argument,
+   unquoted, of a `pass`/`fail`/`waive` call**. Comments and quoted spans are removed before
+   scanning, so no label, message, or comment can satisfy a row. The binding is checked in
+   both directions: an undeclared probe fails too, so a typo reads as a typo.
+2. One implementation, `scripts/check-probes.py`, is shared by the gate, by `preflight.sh`'s
+   own runtime coverage assertion, and by the mutation test. Three copies would drift, and
+   drift is how the second version came to be tested against a reimplementation of itself.
+3. **Failability is gated, not asserted.** `scripts/test-probe-gate.py` deletes each probe,
+   comments it out, and disguises it five ways, requiring the check to notice every time.
+   Each disguise is defeated by a different part of the check, so sabotaging any one part
+   turns the suite red. It runs inside the gate. Two versions shipped unfailable because
+   "the fix works" was asserted; this one has to demonstrate it on every run.
+4. `preflight.sh` asserts at the end that every declared probe actually reported, and names
+   the count of waived probes in its verdict.
+
+**What this does not do, recorded so it is not rediscovered as a surprise.** The gate's
+check is static: it proves an outcome call exists, not that anything reaches it. Probes
+moved into an uncalled function, an `if false` branch, a block below `exit 0`, or behind a
+`:` builtin still count. `--emitted` closes that and runs inside `preflight.sh` — but
+nothing automated runs `preflight.sh`, so reachability is proven only by hand. The gate
+deliberately does not run it: the probes are network calls, and a slow flaky gate gets
+switched off. A gutted probe body whose outcome call survives is invisible to every mode,
+and swapping a probe for a one-line `waive` is green everywhere — hence the waived count.
+
+**Also in this change.** Section 3 now lints and typechecks `scripts/*.py` on the api
+toolchain: this code runs inside the gate, and unchecked gate code weakens every check
+around it. `src_on_disk()` prunes the two gate helpers **by name** rather than pruning
+`scripts/` wholesale, which would have blinded the phase-0 "code before documents" guard
+for any project that puts application code there.
+
+**Not adopted.** Gating on `audit/PREFLIGHT.txt` recording a green run. That is offline and
+deterministic, but it turns an unrelated local condition — a stopped container — into a red
+gate on someone's unrelated commit. The existing rule stands: the gate checks the artifact
+exists; whether it is green and fresh is `work-breaker`'s job at the boundary.

@@ -1,28 +1,29 @@
 
-Preflight — 2026-07-28 22:13
+Preflight — 2026-07-29 02:20
 
 1. Local toolchain
-  PASS  project python 3.12                3.12.12 (uv venv)
-  PASS  uv >= 0.9.25                       0.12.0
-  PASS  docker                             29.5.2
-  PASS  npx (runs vercel cli)              node v24.11.1
+  PASS   uv:python               project python 3.12            3.12.12 (uv venv)
+  PASS   uv:version              uv >= 0.9.25                   0.12.0
+  PASS   docker:engine           docker                         29.5.2
+  PASS   vercel:npx              npx (runs vercel cli)          node v24.11.1
 
 2. Local database
-  PASS  postgres reachable (5433)          server_version 18.1
-  PASS  timescaledb available              2.24.0
+  PASS   docker:postgres         postgres reachable (5433)      server_version 18.1
+  PASS   docker:timescaledb      timescaledb available          2.24.0
 
 3. Source host
-  PASS  github remote reachable            https://github.com/vishnuanapalli/preempt.git
+  PASS   github:remote           github remote reachable        https://github.com/vishnuanapalli/preempt.git
 
 4. Vercel
-  PASS  vercel cli authenticated           vishnuanapalli-8269
-  PASS  vercel rootDirectory == api        api
-  PASS  env PREEMPT_ENVIRONMENT set        present (value not printed)
-  WAIVED env PREEMPT_DATABASE_URL set       not set; no code reads the database before Sprint 1. Waiver lifts when S-004 closes or the first query ships — whichever comes first.
+  PASS   vercel:auth             vercel cli authenticated       vishnuanapalli-8269
+  PASS   vercel:rootdir          vercel rootDirectory == api    api
+  PASS   vercel:env-environment  env PREEMPT_ENVIRONMENT set    present (value not printed)
+  WAIVED vercel:env-database     env PREEMPT_DATABASE_URL set   not set; no code reads the database before Sprint 1. Waiver lifts when S-004 closes or the first query ships — whichever comes first.
 
 5. Deployed application
-  PASS  GET /api/v1/health                 HTTP 200, environment=production
-  PASS  unknown route served by app        FastAPI 404, not a platform 404
+  PASS   vercel:health           GET /api/v1/health             HTTP 200, environment=production
+  PASS   vercel:routing          unknown route served by app    FastAPI 404, not a platform 404
 
-PREFLIGHT: PASS
+  WAIVED 1 of the declared probes, so this run does not prove them: vercel:env-database
+PREFLIGHT: PASS (1 waived)
 

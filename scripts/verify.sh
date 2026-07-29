@@ -76,9 +76,17 @@ DBURL_RE='postgres(ql)?(\+[a-z]+)?://[^:/ ]+:[^@/ ]+@[A-Za-z0-9-]*[A-Za-z][A-Za-
 # Source files on disk, independent of git. The tracked-file scans below are blind in a
 # directory that was never initialized, which is exactly the state a code-first start
 # produces — so presence on disk is checked separately and is never treated as absence.
+#
+# The gate's own two helpers are pruned by name, not the whole of `scripts/`. Without some
+# exclusion a skeleton project is red on its first run — the gate reads its own tooling as
+# "source exists before phase 0", and a gate that is red before any work starts gets
+# switched off. Pruning the directory instead would blind this to a project that puts
+# application code under `scripts/`, which is a real shape. Section 3 lints scripts/*.py
+# separately, so neither file is unchecked.
 src_on_disk() {
   find . \
     -path ./.git -prune -o -path ./node_modules -prune -o \
+    -path ./scripts/check-probes.py -prune -o -path ./scripts/test-probe-gate.py -prune -o \
     -path ./.venv -prune -o -path ./dist -prune -o -path ./build -prune -o \
     \( -name '*.py' -o -name '*.ts' -o -name '*.tsx' -o -name '*.js' \
        -o -name '*.go' -o -name '*.rs' -o -name '*.java' \) -print 2>/dev/null | head -1
@@ -224,6 +232,15 @@ if [ -f api/pyproject.toml ]; then
     ( cd api && uv run ruff format --check . ) && pass "format" || bad "format"
     ( cd api && uv run mypy app )       && pass "mypy"   || bad "mypy"
     ( cd api && uv run pytest )         && pass "pytest" || bad "pytest"
+
+    # The gate's own python runs inside the gate, so a defect there weakens every check
+    # around it while still reporting green. It is held to the same standard as the
+    # application's, on the same tool versions from api's lockfile — no second environment.
+    if ls scripts/*.py >/dev/null 2>&1; then
+      ( cd api && uv run ruff check ../scripts )          && pass "ruff (scripts)"   || bad "ruff (scripts)"
+      ( cd api && uv run ruff format --check ../scripts ) && pass "format (scripts)" || bad "format (scripts)"
+      ( cd api && uv run mypy ../scripts )                && pass "mypy (scripts)"   || bad "mypy (scripts)"
+    fi
   else
     bad "api/pyproject.toml present but uv is not installed"
   fi
@@ -259,7 +276,12 @@ fi
 # What this therefore does NOT check, stated rather than left to be discovered:
 #   - whether the last preflight run was green (read audit/PREFLIGHT.txt)
 #   - whether the friction log is fresh for the current phase
-# Both are work-breaker's job at phase boundaries.
+#   - whether a probe that exists is ever REACHED. The coverage check reads the source, so
+#     a probe moved into a function nobody calls, an `if false` branch, or a block below
+#     `exit 0` still counts. `check-probes.py --emitted` is what proves reachability and
+#     preflight.sh asserts it on every run — but nothing automated runs preflight, so in
+#     practice that proof exists only when someone runs it by hand.
+# All three are work-breaker's job at phase boundaries.
 echo
 echo "4. Process gate"
 
@@ -267,50 +289,35 @@ if [ ! -f docs/SERVICES.md ]; then
   bad "docs/SERVICES.md missing — external dependencies are not inventoried"
 elif [ ! -f scripts/preflight.sh ]; then
   bad "scripts/preflight.sh missing — services are listed but nothing probes them"
+elif [ ! -f scripts/check-probes.py ]; then
+  bad "scripts/check-probes.py missing — nothing binds the manifest to the probes"
 else
   # Every service named in the manifest must be probed, unless the row says it is not
   # provisioned yet. A service depended on but never probed is the most expensive defect
   # class in this workspace.
-  unprobed=$(python3 - <<'PY'
-import re, sys, pathlib
-rows = []
-for line in pathlib.Path("docs/SERVICES.md").read_text().splitlines():
-    line = line.strip()
-    if not line.startswith("|") or line.startswith("|---") or "---|" in line:
-        continue
-    cells = [c.strip() for c in line.strip("|").split("|")]
-    if len(cells) < 2 or cells[0].lower().startswith("service"):
-        continue
-    rows.append(cells)
-# Bind to the probe's INVOCATION, not the file's text. The first version searched the
-# whole file, so a comment naming the services satisfied it — the check could not fail,
-# and a label was in fact edited to make it pass. Found by retro-scribe on its first run.
-probe_src = "\n".join(
-    ln for ln in pathlib.Path("scripts/preflight.sh").read_text().splitlines()
-    if re.search(r'^\s*(pass|fail|waive)\s+"', ln)
-).lower()
-missing = []
-for cells in rows:
-    name = re.sub(r"[*`]", "", cells[0]).strip()
-    joined = " ".join(cells).upper()
-    # Exemptions must be written in the manifest, deliberately, with a reason next to them.
-    if "NOT PROVISIONED" in joined or "NO DIRECT PROBE" in joined:
-        continue
-    key = name.split()[0].lower().strip("*` ")
-    if key and key not in probe_src:
-        missing.append(name)
-print(f"{len(rows)}|" + ",".join(missing))
-PY
-)
-  n_services="${unprobed%%|*}"; no_probe="${unprobed#*|}"
-  if [ "${n_services:-0}" -eq 0 ]; then
-    # An empty table would otherwise pass "every service has a probe" vacuously, which is
-    # the same shape as a gate that cannot fail.
-    bad "docs/SERVICES.md lists no services — the table was never filled in"
-  elif [ -n "$no_probe" ]; then
-    bad "services listed with no probe in preflight.sh: $no_probe"
+  #
+  # The check itself lives in scripts/check-probes.py, so that the gate, preflight's own
+  # coverage assertion, and the mutation test below all exercise one implementation rather
+  # than three that can drift. Read that file for how the binding works and what it still
+  # cannot see.
+  if probes=$(python3 scripts/check-probes.py --static 2>&1); then
+    pass "$probes"
   else
-    pass "every service in SERVICES.md has a probe ($n_services listed)"
+    bad "probe coverage:"
+    printf '%s\n' "$probes" | sed 's/^/          /'
+  fi
+
+  # And the check that the check can fail. Two earlier versions of the probe check shipped
+  # unfailable, so its failability is itself gated rather than asserted.
+  if [ -f scripts/test-probe-gate.py ]; then
+    if mutation=$(python3 scripts/test-probe-gate.py 2>&1); then
+      pass "$mutation"
+    else
+      bad "the probe check does not fail when it should:"
+      printf '%s\n' "$mutation" | sed 's/^/          /'
+    fi
+  else
+    bad "scripts/test-probe-gate.py missing — nothing proves the probe check can fail"
   fi
 
   if [ -f audit/PREFLIGHT.txt ]; then

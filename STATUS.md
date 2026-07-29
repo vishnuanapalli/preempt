@@ -4,7 +4,7 @@ Working state for whoever picks this up next, including me in a fresh session. T
 documents in `docs/` are the source of truth for *what* and *why*; this file is only
 *where we stopped*. Delete anything here that has become false rather than letting it rot.
 
-Last updated: 2026-07-28.
+Last updated: 2026-07-29. BLOCK item 1 closed (D-014); item 11 opened by the review of it.
 
 ## Running this autonomously
 
@@ -34,15 +34,20 @@ From the adversarial review of 2026-07-29 (15 findings, verdict BLOCK). This is 
 work queue: take the top unresolved item, fix it, verify, commit, tick it here. Ordered by
 severity. Sprint 0 cannot close while any of 1–8 is open.
 
-- [ ] **1. Gate §4's probe check cannot detect a deleted probe.** `scripts/verify.sh`
-      builds `probe_src` from lines matching `^\s*(pass|fail|waive)\s+"` and substring-tests
-      the service key against the concatenated *label text*. `vercel` is satisfied by
-      `pass "npx (runs vercel cli)"`; `docker` by the postgres failure message. Delete all
-      four Vercel probes and it still says PASS. The regex also **excludes** the real probes
-      written as `case` arms (`preflight.sh` Vercel-env, postgres, timescale, 404, and the
-      `waive` line), so the waiver mechanism the gate claims to honour is invisible to it.
-      Third attempt at this check — the previous two both shipped unfailable. Bind to the
-      probed *command*, not to label text. Fix in the template too or it does not travel.
+- [x] **1. Gate §4's probe check cannot detect a deleted probe.** Fixed 2026-07-29, D-014.
+      The defect was reproduced first (`6|` — six rows, zero missing, with every Vercel
+      probe deleted) rather than taken on trust. Each row of `SERVICES.md` now declares
+      machine-read `service:name` ids; each must appear as the first **unquoted argument**
+      of a `pass`/`fail`/`waive` call, with comments and quoted spans stripped before
+      scanning. One shared implementation (`scripts/check-probes.py`) serves the gate,
+      preflight's runtime coverage assertion, and the mutation test.
+      `scripts/test-probe-gate.py` runs in the gate and proves the check can fail — nine
+      cases, each defeated by a different part of the check, so sabotaging any one part
+      turns it red. Ported to the template, which still comes up green on a fresh run.
+      **Residual gap, stated not hidden:** `--static` proves a call exists, not that it is
+      reached; probes hidden in an uncalled function, an `if false` branch, below `exit 0`,
+      or behind `:` still count. `--emitted` proves reachability and preflight asserts it —
+      but nothing automated runs preflight. See D-014 and the `check-probes.py` docstring.
 - [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
       has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
       it proves nothing. Either a real baseline migration, or the claim comes down.
@@ -73,6 +78,13 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       pooling that nothing enforces and that is currently false (a `-pooler` validator is
       three lines; precedent at `core/config.py:45`). `03-QUALITY.md:51` claims CI runs
       integration tests; CI provisions no database. `04-PLAN.md:46` still says Koyeb.
+
+- [ ] **11. `DOC_PHASES` in `scripts/verify.sh` has drifted from the template's.** The
+      template lists `2:docs/SERVICES.md` and `5:docs/10-FRICTION.md`; preempt's lists
+      neither, so `docs/SERVICES.md` is never placeholder-scanned or length-checked by §1
+      even though §4 depends on it entirely. Pre-existing, found by the review of item 1 and
+      deliberately not folded into it. Both files exist and are substantial, so adding the
+      rows should be green — verify rather than assume.
 
 **Done from the review:** `httpx2` removed (unused, confusable, four days old);
 `docs/.phase` corrected 5 → 4; stale `uv` failure claims removed; `Superseded by` markers
@@ -207,6 +219,12 @@ Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
   number was not confirmed from its abstract. Do not cite it in the case study without
   reading the full paper.
 - **`docs/09-LEARNING.md` is still empty** and becomes due at phase 5.
+- **Nothing automated ever runs `scripts/preflight.sh`** — not CI, not the gate. §4 checks
+  only that `audit/PREFLIGHT.txt` exists, so a recorded `PREFLIGHT: FAIL` passes the gate.
+  This is deliberate (network probes make a Stop hook flaky, and a flaky gate gets switched
+  off — D-014 records why gating on a green run was not adopted), but it means probe
+  *reachability* is proven only when someone runs preflight by hand. If that proof should
+  be automatic, CI is the place, not the Stop hook.
 
 ## Conventions that are easy to get wrong
 

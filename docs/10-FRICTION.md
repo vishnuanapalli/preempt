@@ -96,6 +96,21 @@ file's text.** Enforcement: build `probe_src` from only those lines that call th
 `pass`/`fail`/`waive` helpers, in `scripts/verify.sh` section 4 **and** in the template's
 copy. Both, or the fix does not travel.
 
+> **The enforcement clause above is superseded and was itself defective — see D-014
+> (2026-07-29).** The rule is right; the mechanism it prescribes is the *second* unfailable
+> implementation. Building `probe_src` from the helper-call lines and substring-matching the
+> service name still matches the *label text* on those lines, so `Vercel` was satisfied by
+> `pass "npx (runs vercel cli)"` and `Docker` by a postgres failure message — every Vercel
+> probe could be deleted with the gate still green, demonstrated 2026-07-29. Anchoring the
+> pattern to the start of a line also hid every probe written as a `case` arm or `&&` chain.
+> Applied literally to a new project this reproduces the defect. The mechanism that works:
+> a machine-read probe id in **argument position**, with comments and quoted spans stripped
+> before scanning, plus a mutation test inside the gate that proves the check can fail.
+
+*This entry is a correction to a rule that would have misled, not the Sprint 0 boundary
+retro. That retro is still owed — it is BLOCK item 8 — and the third recurrence of this one
+defect class is the most valuable thing it has to record.*
+
 ### Two documents cite a live value that was already false when they shipped
 
 `STATUS.md:29` pastes `{"status":"ok","environment":"local",...}` and `STATUS.md:97` calls
