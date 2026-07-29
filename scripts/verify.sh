@@ -326,6 +326,19 @@ else
     bad "scripts/test-probe-gate.py missing — nothing proves the probe check can fail"
   fi
 
+  # Ledger R9. Prose did not stop this project accumulating 1,581 lines of tests against
+  # 300 lines of application, so it is a check. Resolution when it fails is to delete
+  # verification covering code that does not exist yet, or to defer the criterion that
+  # demanded it — never to raise the ceiling.
+  if [ -f scripts/check-proportion.py ]; then
+    if ratio=$(python3 scripts/check-proportion.py 2>/dev/null); then
+      pass "$(printf '%s' "$ratio" | head -1 | sed 's/^PASS  //')"
+    else
+      bad "verification is out of proportion to the code it covers:"
+      python3 scripts/check-proportion.py 2>&1 | sed 's/^/          /'
+    fi
+  fi
+
   if [ -f audit/PREFLIGHT.txt ]; then
     pass "preflight has been run and recorded"
   else

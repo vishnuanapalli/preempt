@@ -202,15 +202,10 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       project after `grep -P`. Same root as item 10's `03-QUALITY.md:51` claim, and the fix
       is the same one: provision a database in CI, or stop claiming CI runs integration tests.
 
-- [ ] **12. Parser hardening on `check-probes.py` is open-ended, and should be treated as
-      such.** Five review rounds found six shapes that fooled the scanner — argument
-      position, keywords as arguments, brace expansion, backslash continuation, heredoc
-      terminator forms, ANSI-C quoting. Each was real and each was fixed, but the rate has
-      not fallen, and the reviewer's own note is "expect a sixth to exist". This is not a
-      defect to close; it is a property of hand-parsing shell. The mitigations that matter
-      are already in place — every fixed shape is a permanent case, and the docstring says
-      the list is what is known rather than a bound. Do not spend further rounds hunting
-      shapes unless one is found in a `preflight.sh` anyone would actually write.
+- [x] **12. Parser hardening on `check-probes.py` is open-ended.** Closed 2026-07-29 by
+      recording it rather than fixing it, which is what the finding itself asked for — it is a
+      property of hand-parsing shell, not a defect with a done state. Moved to *Standing
+      positions* below so it stops sitting in a work queue it can never leave.
 
 - [x] **11. `DOC_PHASES` in `scripts/verify.sh` had drifted from the template's.** Closed
       2026-07-29, recorded in D-017. Both rows added; `docs/SERVICES.md` now appears in
@@ -329,6 +324,19 @@ Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
    ADR, not a silent edit.
 4. Close Sprint 0: the BLOCK list above, then `retro-scribe`, then `work-breaker` PASS (D-013). S-005 is deferred, not pending.
 5. Sprint 1: schema, simulator, Azure provider.
+
+## Standing positions
+
+Not defects, and not work. Recorded so they are not rediscovered as findings.
+
+- **Parser hardening on `scripts/check-probes.py` has no done state.** Five review rounds
+  found six shapes that fooled the scanner — argument position, keywords as arguments, brace
+  expansion, backslash continuation, heredoc terminator forms, ANSI-C quoting. Each was real
+  and each was fixed, and the rate did not fall; the reviewer's own note was "expect a sixth
+  to exist". The mitigations that matter are in place: every fixed shape is a permanent test
+  case, and the docstring says the list is what is known rather than a bound. **Do not spend
+  further rounds hunting shapes** unless one turns up in a `preflight.sh` someone would
+  actually write. Was BLOCK item 12.
 
 ## Open threads
 
