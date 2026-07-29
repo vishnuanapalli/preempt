@@ -291,13 +291,18 @@ for cells in rows:
     key = name.split()[0].lower().strip("*` ")
     if key and key not in probe_src:
         missing.append(name)
-print(",".join(missing))
+print(f"{len(rows)}|" + ",".join(missing))
 PY
 )
-  if [ -n "$unprobed" ]; then
-    bad "services listed with no probe in preflight.sh: $unprobed"
+  n_services="${unprobed%%|*}"; no_probe="${unprobed#*|}"
+  if [ "${n_services:-0}" -eq 0 ]; then
+    # An empty table would otherwise pass "every service has a probe" vacuously, which is
+    # the same shape as a gate that cannot fail.
+    bad "docs/SERVICES.md lists no services — the table was never filled in"
+  elif [ -n "$no_probe" ]; then
+    bad "services listed with no probe in preflight.sh: $no_probe"
   else
-    pass "every service in SERVICES.md has a probe"
+    pass "every service in SERVICES.md has a probe ($n_services listed)"
   fi
 
   if [ -f audit/PREFLIGHT.txt ]; then
