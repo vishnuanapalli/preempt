@@ -28,6 +28,59 @@ conversation. Start it in a **fresh session**.
 
 Authority for this is D-013. The frontend stop is not delegated and not negotiable.
 
+## Sprint 0 BLOCK list
+
+From the adversarial review of 2026-07-29 (15 findings, verdict BLOCK). This is the loop's
+work queue: take the top unresolved item, fix it, verify, commit, tick it here. Ordered by
+severity. Sprint 0 cannot close while any of 1–8 is open.
+
+- [ ] **1. Gate §4's probe check cannot detect a deleted probe.** `scripts/verify.sh`
+      builds `probe_src` from lines matching `^\s*(pass|fail|waive)\s+"` and substring-tests
+      the service key against the concatenated *label text*. `vercel` is satisfied by
+      `pass "npx (runs vercel cli)"`; `docker` by the postgres failure message. Delete all
+      four Vercel probes and it still says PASS. The regex also **excludes** the real probes
+      written as `case` arms (`preflight.sh` Vercel-env, postgres, timescale, 404, and the
+      `waive` line), so the waiver mechanism the gate claims to honour is invisible to it.
+      Third attempt at this check — the previous two both shipped unfailable. Bind to the
+      probed *command*, not to label text. Fix in the template too or it does not travel.
+- [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
+      has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
+      it proves nothing. Either a real baseline migration, or the claim comes down.
+- [ ] **3. S-001 has no evidence artifact, and its deliverable refuses to hold one.**
+      `03-QUALITY.md` DoD 2 requires verify.sh output on record; `docs/DEMO.md` says "no
+      command output is pasted here". Resolve the contradiction, then record the red-CI run.
+- [ ] **4. `04-PLAN.md:86` and `:98` still order the D-007/D-008 mechanisms built** —
+      the single-instance assertion and startup listener precondition D-012 calls actively
+      misleading. Also `05-BACKLOG.md:165`. Point them at D-012.
+- [ ] **5. `01-DESIGN.md` presents superseded decisions as current** — `:269` still names
+      Koyeb; `:156/:212/:213` still specify freshness in `/health` polled every 15 minutes,
+      the opposite of the shipped code and of D-009. No `/ready` row in its API table.
+- [ ] **6. S-003's third criterion depends on Sprint 2 work** — `05-BACKLOG.md:52` needs
+      "the standard error shape", defined at `:151` in Sprint 2. Same defect S-005 was
+      deferred for. Also `/ready` returns `status="ok"` while nothing is configured.
+- [ ] **7. S-005's deferral has no decision entry**, and this file contradicted the backlog
+      about it. D-011's precedent requires one for a MUST story leaving a sprint.
+- [ ] **8. No Sprint 0 boundary retro.** `docs/10-FRICTION.md`'s latest entry closes one
+      cost finding. Nothing records the S-005 deferral, the phase correction, D-012, D-013,
+      or why S-003 and S-004 close partial. Run `retro-scribe`.
+- [ ] **9. Cold start is unestablished.** `audit/COLD-START.txt` records the attempt and the
+      method that would settle it: read Vercel's runtime logs for the cold-start flag on the
+      request id rather than inferring from latency.
+- [ ] **10. Smaller confirmed contradictions.** `docker-compose.yml:3` claims PostgreSQL
+      18.4 pinned to Neon; preflight observes 18.1. `api/vercel.json` ships
+      `git diff --quiet HEAD^ HEAD ./` while the friction log records testing `-- api/` —
+      cwd-dependent, and not the string that was tested. `api/app/db/session.py:6` asserts
+      pooling that nothing enforces and that is currently false (a `-pooler` validator is
+      three lines; precedent at `core/config.py:45`). `03-QUALITY.md:51` claims CI runs
+      integration tests; CI provisions no database. `04-PLAN.md:46` still says Koyeb.
+
+**Done from the review:** `httpx2` removed (unused, confusable, four days old);
+`docs/.phase` corrected 5 → 4; stale `uv` failure claims removed; `Superseded by` markers
+added to D-003, D-007, D-008; the cold-start box unticked with its command recorded.
+
+**Owner-blocked, not loop-blocked** — leave unticked and move on: `PREEMPT_DATABASE_URL`,
+an uptime-monitor account, and the 24-hour CU-hours window.
+
 ## Current position
 
 **Phase 4 complete** (`docs/.phase` = 4). All planning documents are written. Sprint 0 is
@@ -39,7 +92,7 @@ in progress.
 | S-002 database provisioned, migrations reversible | **Not done.** The reversibility round-trip was run against a baseline whose `upgrade()` and `downgrade()` are both `pass`, so it proves nothing. The Neon-branch test database was also replaced by a local one with no ADR |
 | S-003 health endpoint reporting freshness | **Partial.** `/health` and `/ready` split per D-009; `/ready` still returns nulls because no tables exist yet |
 | S-004 live on the public internet | **Partial.** Serving over HTTPS since `43673c8`; one of six acceptance criteria met — see below |
-| S-005 seed script | **Not started** |
+| S-005 seed script | **Deferred into Sprint 1** (docs/05-BACKLOG.md). Needs a decision entry — BLOCK item 7 |
 
 ## The Vercel problem — resolved 2026-07-28 in `43673c8`
 
@@ -125,7 +178,7 @@ Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
 3. **Measure and record** cold-start duration after an hour idle, and CU-hours consumed
    in the first 24 hours. `01-DESIGN.md` asserts these; if reality disagrees, that is an
    ADR, not a silent edit.
-4. **Seed script** (S-005), then close Sprint 0 with a demo and an adversarial review.
+4. Close Sprint 0: the BLOCK list above, then `retro-scribe`, then `work-breaker` PASS (D-013). S-005 is deferred, not pending.
 5. Sprint 1: schema, simulator, Azure provider.
 
 ## Open threads
