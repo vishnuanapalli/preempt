@@ -51,6 +51,11 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       reached; probes hidden in an uncalled function, an `if false` branch, below `exit 0`,
       or behind `:` still count. `--emitted` proves reachability and preflight asserts it —
       but nothing automated runs preflight. See D-014 and the `check-probes.py` docstring.
+      **Review state:** two rounds of `work-breaker` BLOCK, both correct, both fixed — round
+      one caught a mutation case that could not fail, round two caught the suite testing only
+      one of the check's two inputs. A third review of `88e7a3e` was requested and had not
+      returned when this was written. The ticked box rests on the evidence in this entry, not
+      on a PASS verdict; if the third review lands a BLOCK, untick it.
 - [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
       has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
       it proves nothing. Either a real baseline migration, or the claim comes down.
