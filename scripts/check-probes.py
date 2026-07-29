@@ -289,6 +289,12 @@ def declared(rows: list[tuple[str, bool, list[str]]]) -> set[str]:
 def check_rows(rows: list[tuple[str, bool, list[str]]]) -> list[str]:
     """Row-level problems: an empty table, or a live row that declares no probe at all."""
     if not rows:
+        # This exists for the message, not the verdict, and no test can isolate it: `want`
+        # is derived from `rows`, so an empty table forces an empty `want`, which the
+        # vacuity guard below already fails on. It is strictly subsumed -- there is no
+        # manifest where this fires and that one would not. Said out loud because a reviewer
+        # reported its removal as a missed sabotage, and the honest answer is that removing
+        # it changes which sentence prints and nothing else.
         return ["docs/SERVICES.md lists no services -- the table was never filled in"]
     problems = []
     for name, exempt, ids in rows:
