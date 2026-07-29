@@ -81,6 +81,16 @@ framework preset — `api/vercel.json` is what selects the Python builder.
 - **`api/.env`** holds local connection strings. Gitignored. The Neon connection string is
   deliberately not stored in any file; it goes into Vercel's environment variables.
 
+## Process system, added 2026-07-28
+
+`docs/SERVICES.md` + `scripts/preflight.sh` + `docs/10-FRICTION.md`, enforced by section 4
+of the gate. Run `bash scripts/preflight.sh | tee audit/PREFLIGHT.txt` when a service is
+added or access changes. The last run is **FAIL (1)**: `uv` 0.9.18 is below the 0.9.25 floor
+Vercel requires, so the local `vercel build` reproduction cannot run on this machine —
+`uv self update` clears it. The Neon row is waived in writing until Sprint 1.
+
+Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
+
 ## Next actions, in order
 
 1. **Set the environment variables** (S-004). Production currently answers
