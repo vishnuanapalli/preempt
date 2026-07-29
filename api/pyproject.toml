@@ -64,3 +64,9 @@ addopts = "-q --strict-markers"
 markers = [
     "integration: requires a real database; excluded from the default unit run",
 ]
+
+[tool.vercel]
+# Explicit entrypoint rather than relying on Vercel's auto-detection. Detection looks
+# for a supported path relative to the project root; making it explicit means the
+# deployment does not silently build something else when the layout changes.
+entrypoint = "app.main:app"
