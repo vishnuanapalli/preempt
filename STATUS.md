@@ -34,7 +34,8 @@ From the adversarial review of 2026-07-29 (15 findings, verdict BLOCK). This is 
 work queue: take the top unresolved item, fix it, verify, commit, tick it here. Ordered by
 severity. Sprint 0 cannot close while any of 1–8 is open.
 
-- [x] **1. Gate §4's probe check cannot detect a deleted probe.** Fixed 2026-07-29, D-014.
+- [ ] **1. Gate §4's probe check cannot detect a deleted probe.** Fix built 2026-07-29, D-014;
+      **unticked pending review** — see Review state below.
       The defect was reproduced first (`6|` — six rows, zero missing, with every Vercel
       probe deleted) rather than taken on trust. Each row of `SERVICES.md` now declares
       machine-read `service:name` ids; each must appear as the first **unquoted argument**
@@ -51,20 +52,23 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       reached; probes hidden in an uncalled function, an `if false` branch, below `exit 0`,
       or behind `:` still count. `--emitted` proves reachability and preflight asserts it —
       but nothing automated runs preflight. See D-014 and the `check-probes.py` docstring.
-      **Review state: `work-breaker` PASS names `88e7a3e`, not HEAD.** `dc836f9` then
-      rewrote `CALL_RE` and `HEREDOC_RE` — the two regexes at the centre of the check — so
-      that verdict does not extend to them and is not being treated as if it does; a
-      re-review of `b81472b` is pending. Before committing, both of the reviewer's
-      preconditions were met: all 13 ids still resolve from the real `preflight.sh`, and a
-      live preflight run agrees via `--emitted` (`PREFLIGHT: PASS (1 waived)`, exit 0). The
-      PASS came after two rounds of BLOCK that
-      were both correct and both fixed — round one caught a mutation case that could not
-      fail, round two caught the suite testing only one of the check's two inputs. Its three
-      remaining MINOR findings are also fixed: the suite now pins that the *Probe column* is
-      read rather than the whole row, and the scanner handles backslash continuations and
-      digit- or dot-terminated heredocs. Chasing those exposed a plainer defect neither
-      review had named — `echo hi pass a:b` counted a probe, because any preceding whitespace
-      was treated as command position. 23 cases; 15 sabotages run, all caught.
+      **Review state: BLOCK on `b81472b`, findings fixed, re-review pending.** Four rounds
+      of `work-breaker`, every one correct, each catching a different instance of the same
+      mistake — claiming coverage that had not been demonstrated. Round one: a mutation case
+      that could not fail. Round two: the suite testing only one of the check's two inputs.
+      Round three: PASS on `88e7a3e`. Round four: the command-position rule I added in
+      `dc836f9` offered shell keywords as a bare alternative, so `echo then pass a:b` counted
+      a probe — falsifying, in the same commit, the comment claiming that hole was closed.
+      Now fixed: a keyword must itself sit at command position, which also makes `if pass …`,
+      `! pass …`, `time pass …` and `FOO=1 pass …` count correctly; `<<\EOF` heredocs are
+      tracked. 26 cases, 17 sabotages all caught, zero false PASS across 10 adversarial
+      shapes and zero misses across 13 real ones.
+      **The box stays unticked until a review passes on the commit that is actually HEAD.**
+      This file said to untick on a BLOCK and that is being honoured rather than argued with.
+      A verdict naming an older commit does not transfer: `dc836f9` rewrote the two regexes
+      at the centre of the check after the round-three PASS, and round four found a real
+      defect in exactly that rewrite.
+
 - [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
       has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
       it proves nothing. Either a real baseline migration, or the claim comes down.

@@ -132,8 +132,13 @@ def main() -> int:
             print("  every case below would be meaningless; fix this first")
             return 1
 
+        # Only well-formed ids, because run() folds stderr into its output and anything the
+        # interpreter prints there would otherwise become a fake id: a SyntaxWarning from a
+        # docstring once did exactly that, and the suite reported four failures about
+        # "deleting probe '<warning text>'". Garbage in the input must not become findings.
         code, ids_out = run(ROOT, "--ids")
-        ids = [i for i in ids_out.splitlines() if i.strip()]
+        well_formed = re.compile(r"^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9-]*$")
+        ids = [i.strip() for i in ids_out.splitlines() if well_formed.match(i.strip())]
         if code != 0 or not ids:
             print("  docs/SERVICES.md declares no probe ids, so there is nothing to mutate")
             print("  -- write them into the Probe column before this can mean anything")
@@ -236,6 +241,25 @@ def main() -> int:
                 'cat <<\'EOF.txt\'\npass {pid} "x" "y"\nEOF.txt',
                 "in a dotted-terminator heredoc",
                 "quoted heredoc terminators",
+            ),
+            # A shell keyword as an argument. A first attempt at the command-position rule
+            # offered keywords as a bare alternative, which matched the word anywhere on the
+            # line and reopened the argument hole that same rule was written to close.
+            (
+                "echo then pass {pid} done",
+                "after a keyword in argument position",
+                "requiring the keyword to be at command position too",
+            ),
+            (
+                "echo do pass {pid} done",
+                "after a loop keyword in argument position",
+                "requiring the keyword to be at command position too",
+            ),
+            # `<<\EOF` is the ordinary way to write a non-expanding heredoc without quotes.
+            (
+                'cat <<\\EOF\npass {pid} "x" "y"\nEOF',
+                "in a backslash-quoted heredoc",
+                "backslash heredoc terminators",
             ),
         ]
         pid = ids[0]

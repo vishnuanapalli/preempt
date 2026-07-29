@@ -53,6 +53,9 @@ and each one *once counted a probe that does not exist*:
 
   - an argument that merely follows whitespace, as in `echo hi pass a:b`, where the first
     word of the command is `echo` and `pass` is data;
+  - the same with a shell keyword as the argument -- `echo then pass a:b` -- which slipped
+    past a first attempt at the rule above that matched keywords anywhere on the line;
+  - a heredoc terminator quoted with a backslash, `<<\\EOF`, which is ordinary shell;
   - a line continued from the one above it, whose first word is likewise an argument;
   - an indented terminator for a plain `<<` heredoc, which bash does not honour;
   - a heredoc whose terminator begins with a digit, or holds characters a bare word cannot;
@@ -60,9 +63,15 @@ and each one *once counted a probe that does not exist*:
   - `$'...\\'...'`, where the escaped quote keeps the string open;
   - a quoted span abutting a word, which shell concatenates into one token.
 
-That list is what is *known*, and it grew every time somebody went looking -- twice by
+That list is what is *known*, and it grew every time somebody went looking -- four times by
 adversarial review after this file claimed to be safe. Treat it as evidence that the list
 is incomplete rather than as a bound on how incomplete.
+
+It errs the other way too, and those are named rather than left as mysteries. A probe
+written after a construct the command-position chain does not model reads as absent: a
+`case` pattern that ends in something other than `)`, a probe inside `$( … )` spanning
+lines, or a herestring misread as a heredoc, which hides everything after it. If a real
+probe is reported missing and you can see the call, that is the place to look.
 
 On anything ambiguous the scanner errs toward reporting a probe *absent*: a false FAIL is
 loud and gets fixed, where a false PASS is the failure this file exists to prevent. That is
@@ -91,20 +100,26 @@ ID_RE = re.compile(rf"^{ID}$")
 # Applied only to source with quoted spans already removed, so an id appearing inside a
 # label is invisible here -- which is the whole point.
 #
-# A command starts at the beginning of a logical line, after a separator, or after one of
-# the keywords that introduce one. Merely being preceded by whitespace is NOT enough: an
-# earlier version accepted that, so `echo hi pass a:b` counted a probe where `pass` is an
-# argument to echo, and any line continued from the one above counted as a fresh command.
-CALL_RE = re.compile(
-    rf"(?:^|[;&|(){{}}]|\b(?:then|else|elif|do)\b)\s*(?:pass|fail|waive)\s+({ID})(?=\s|$)"
-)
+# A command starts at the beginning of a logical line or after a separator. Merely being
+# preceded by whitespace is NOT enough: an early version accepted that, so `echo hi pass a:b`
+# counted a probe where `pass` is an argument to echo.
+#
+# Words that may precede a command without being it -- `if`, `!`, a `VAR=x` assignment --
+# are allowed in between, but each must itself sit at command position. Offering them as a
+# bare alternative instead was the same bug wearing a hat: `\b(?:then|do)\b` matched the
+# word anywhere, so `echo then pass a:b` counted again. Anything reached only by following
+# this chain from a separator is a command; anything else is an argument.
+LEAD = r"(?:then|else|elif|do|if|while|until|time|!|[A-Za-z_][A-Za-z0-9_]*=\S*)"
+CALL_RE = re.compile(rf"(?:^|[;&|(){{}}])\s*(?:{LEAD}\s+)*(?:pass|fail|waive)\s+({ID})(?=\s|$)")
 
 # The start of a heredoc, whose body is data rather than code. Matched at the cursor, so it
 # only fires outside quotes. Group 1 is the `-` form, which alone permits a tab-indented
 # terminator. A quoted terminator may hold anything -- `<<'EOF.txt'` is legal -- while an
 # unquoted one is a bare word, and it may begin with a digit: `<<'9NOTES'` is a real heredoc
 # that an earlier letters-only pattern did not track, leaving its body scanned as code.
-HEREDOC_RE = re.compile(r"<<(-?)\s*(?:'([^']*)'|\"([^\"]*)\"|([A-Za-z0-9_]+))")
+# `<<\EOF` is the ordinary way to write a non-expanding heredoc without quoting, so the
+# optional backslash is not an edge case; without it that body was scanned as code.
+HEREDOC_RE = re.compile(r"<<(-?)\s*(?:'([^']*)'|\"([^\"]*)\"|\\?([A-Za-z0-9_]+))")
 
 # Stands in for a removed quoted span. Deliberately not a space: shell concatenates a
 # quoted span with the word beside it, so `echo "already"pass x:y` is one word `alreadypass`
