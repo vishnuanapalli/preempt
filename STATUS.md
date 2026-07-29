@@ -298,6 +298,14 @@ Full rationale and the cross-project rules: `~/.claude/PROCESS-LEDGER.md`.
 
 - Never `sleep` in a shell command on this machine — a hook blocks it. Use `command sleep`
   or, better, do not poll at all.
+- **Re-run the gate after the last edit, not the last interesting edit.** Item 2 was
+  committed with the gate last run several edits earlier — "docstrings and markdown only",
+  and it was labelled unverified rather than checked. The Stop hook caught what it missed:
+  a placeholder connection string, `u:p@ep-x.<provider>.tech`, tripping section 2's
+  credential scanner, which cannot tell a convincing placeholder from a real credential and
+  should not try. Use `example.com` and `user:password` in any URL that must look remote.
+  If something concurrent makes a gate run unsafe — an agent mid-mutation-test — wait for
+  it. Deferring the gate and labelling the gap is not the same as running it.
 - `docs/.phase` gates which documents are required. Bump it only when a phase is genuinely
   complete; the gate is what makes that claim checkable.
 - The decision log is append-only. Supersede, never edit.

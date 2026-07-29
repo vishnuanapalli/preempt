@@ -248,9 +248,17 @@ def test_different_names_on_one_server_are_different_databases() -> None:
 
 
 def test_different_hosts_are_different_databases() -> None:
+    """The remote host is `example.com`, not a provider hostname.
+
+    Section 2 of the gate flags any tracked line carrying a password against a host that
+    has a letter and a dot — which a realistic-looking `ep-x.<provider>.tech` URL does,
+    and which turned the gate red on the first run after this test was written. Real
+    credentials and convincing placeholders are indistinguishable to a scanner, and the
+    scanner is right to refuse to tell them apart.
+    """
     assert not same_database(
         "postgresql+asyncpg://u:p@localhost:5433/preempt",
-        "postgresql+asyncpg://u:p@ep-x.neon.tech:5433/preempt",
+        "postgresql+asyncpg://user:password@ep-x.example.com:5433/preempt",
     )
 
 
