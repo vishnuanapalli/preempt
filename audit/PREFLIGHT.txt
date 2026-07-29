@@ -1,0 +1,28 @@
+
+Preflight — 2026-07-28 20:59
+
+1. Local toolchain
+  PASS  project python 3.12                3.12.12 (uv venv)
+  FAIL  uv >= 0.9.25                       found 0.9.18 — too old for 'vercel build' locally
+  PASS  docker                             29.5.2
+  PASS  npx (runs vercel cli)              node v24.11.1
+
+2. Local database
+  PASS  postgres reachable (5433)          server_version 18.1
+  PASS  timescaledb available              2.24.0
+
+3. Source host
+  PASS  github remote reachable            https://github.com/vishnuanapalli/preempt.git
+
+4. Vercel
+  PASS  vercel cli authenticated           vishnuanapalli-8269
+  PASS  vercel rootDirectory == api        api
+  PASS  env PREEMPT_ENVIRONMENT set        present (value not printed)
+  WAIVED env PREEMPT_DATABASE_URL set       not set; no code reads the database before Sprint 1. Waiver lifts when S-004 closes or the first query ships — whichever comes first.
+
+5. Deployed application
+  PASS  GET /api/v1/health                 HTTP 200, environment=production
+  PASS  unknown route served by app        FastAPI 404, not a platform 404
+
+PREFLIGHT: FAIL (1)
+

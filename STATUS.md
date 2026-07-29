@@ -52,12 +52,24 @@ setting the preset in project settings but lives in the repo.
 
 **What actually found it:** `vercel build` run locally against a copy of `api/`. It uses
 the same detection as the cloud, so the empty output directory was visible in seconds
-without a deploy cycle. Reach for that first next time. It needs a hand-written
-`.vercel/project.json` (`projectId`, `orgId`, `settings`) to skip the authenticated pull,
-and a `uv` at least as new as the one Vercel requires.
+without a deploy cycle. Reach for that first next time.
 
-**Still a dashboard setting:** Root Directory must remain `api`. The repo cannot express
-it, so it is the one part of this that can be silently lost.
+```sh
+npx vercel@latest pull --yes --environment production   # writes .vercel/project.json
+npx vercel@latest build --prod                          # inspect .vercel/output/
+```
+
+The CLI is not installed globally — `npx vercel@latest` is the invocation, and `--cwd`
+avoids needing to `cd`. It is already authenticated as `vishnuanapalli-8269`, so the
+pull works; an earlier session concluded otherwise after mistaking an `npx` package
+download for a login prompt. Note that Vercel requires a reasonably new `uv` and refuses
+to build with an older one, which is a local-only obstacle — the cloud builder has its
+own.
+
+**Still a dashboard setting:** Root Directory is `api`, confirmed by reading
+`.vercel/project.json` after a pull rather than by inference. The repo cannot express it,
+so it is the one part of this that can be silently lost. Project settings carry no
+framework preset — `api/vercel.json` is what selects the Python builder.
 
 ## Environment
 

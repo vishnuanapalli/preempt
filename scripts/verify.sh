@@ -250,6 +250,69 @@ if [ "$ran_any" -eq 0 ]; then
   fi
 fi
 
+# ------------------------------------------------------------------ 4. process
+# The process record is a deliverable and rots like any other. These checks are
+# deliberately cheap, offline, and deterministic: they read artifacts on disk and never
+# touch the network. Putting the live probes here instead would make the gate slow and
+# flaky, and a flaky gate gets switched off — which is a worse outcome than no gate.
+#
+# What this therefore does NOT check, stated rather than left to be discovered:
+#   - whether the last preflight run was green (read audit/PREFLIGHT.txt)
+#   - whether the friction log is fresh for the current phase
+# Both are work-breaker's job at phase boundaries.
+echo
+echo "4. Process gate"
+
+if [ ! -f docs/SERVICES.md ]; then
+  bad "docs/SERVICES.md missing — external dependencies are not inventoried"
+elif [ ! -f scripts/preflight.sh ]; then
+  bad "scripts/preflight.sh missing — services are listed but nothing probes them"
+else
+  # Every service named in the manifest must be probed, unless the row says it is not
+  # provisioned yet. A service depended on but never probed is the most expensive defect
+  # class in this workspace.
+  unprobed=$(python3 - <<'PY'
+import re, sys, pathlib
+rows = []
+for line in pathlib.Path("docs/SERVICES.md").read_text().splitlines():
+    line = line.strip()
+    if not line.startswith("|") or line.startswith("|---") or "---|" in line:
+        continue
+    cells = [c.strip() for c in line.strip("|").split("|")]
+    if len(cells) < 2 or cells[0].lower().startswith("service"):
+        continue
+    rows.append(cells)
+probe_src = pathlib.Path("scripts/preflight.sh").read_text().lower()
+missing = []
+for cells in rows:
+    name = re.sub(r"[*`]", "", cells[0]).strip()
+    if "NOT PROVISIONED" in " ".join(cells):
+        continue
+    key = name.split()[0].lower().strip("*` ")
+    if key and key not in probe_src:
+        missing.append(name)
+print(",".join(missing))
+PY
+)
+  if [ -n "$unprobed" ]; then
+    bad "services listed with no probe in preflight.sh: $unprobed"
+  else
+    pass "every service in SERVICES.md has a probe"
+  fi
+
+  if [ -f audit/PREFLIGHT.txt ]; then
+    pass "preflight has been run and recorded"
+  else
+    bad "audit/PREFLIGHT.txt missing — preflight was never actually run"
+  fi
+fi
+
+if [ -s docs/10-FRICTION.md ]; then
+  pass "friction log present"
+else
+  bad "docs/10-FRICTION.md missing or empty — retro-scribe has not recorded this phase"
+fi
+
 # ------------------------------------------------------------------- verdict
 echo
 if [ "$fail" -eq 0 ]; then
