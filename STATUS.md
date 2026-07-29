@@ -41,9 +41,12 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       of a `pass`/`fail`/`waive` call, with comments and quoted spans stripped before
       scanning. One shared implementation (`scripts/check-probes.py`) serves the gate,
       preflight's runtime coverage assertion, and the mutation test.
-      `scripts/test-probe-gate.py` runs in the gate and proves the check can fail — nine
-      cases, each defeated by a different part of the check, so sabotaging any one part
-      turns it red. Ported to the template, which still comes up green on a fresh run.
+      `scripts/test-probe-gate.py` runs in the gate and proves the check can fail —
+      seventeen cases mutating **both** of the check's inputs, since the guards against a
+      vacuous check live on the manifest side and a first version that mutated only
+      `preflight.sh` left them untested. Thirteen sabotages of the check were run to confirm
+      each targeted part turns the suite red. Ported to the template, still green on a
+      fresh run.
       **Residual gap, stated not hidden:** `--static` proves a call exists, not that it is
       reached; probes hidden in an uncalled function, an `if false` branch, below `exit 0`,
       or behind `:` still count. `--emitted` proves reachability and preflight asserts it —

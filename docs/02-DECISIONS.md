@@ -641,16 +641,29 @@ so the waiver mechanism the gate claimed to honour was invisible to it.
 1. Each row of `docs/SERVICES.md` declares its probes as machine-read `service:name` ids in
    the Probe column. Each id must appear in `scripts/preflight.sh` as the **first argument,
    unquoted, of a `pass`/`fail`/`waive` call**. Comments and quoted spans are removed before
-   scanning, so no label, message, or comment can satisfy a row. The binding is checked in
-   both directions: an undeclared probe fails too, so a typo reads as a typo.
+   scanning, so an ordinary label, message, or comment cannot satisfy a row. The binding is
+   checked in both directions: an undeclared probe fails too, so a typo reads as a typo.
+
+   The scanner is not a shell parser, and saying so is not a formality. Four shapes did
+   satisfy a row wrongly — an indented terminator on a plain `<<` heredoc, a second heredoc
+   opened on the same line, `$'...\'...'`, and a quoted span abutting a word, which shell
+   concatenates into one token. All four are fixed and pinned as test cases, and
+   `check-probes.py` now lists what is known to fool it instead of asserting an invariant
+   it cannot hold.
 2. One implementation, `scripts/check-probes.py`, is shared by the gate, by `preflight.sh`'s
    own runtime coverage assertion, and by the mutation test. Three copies would drift, and
    drift is how the second version came to be tested against a reimplementation of itself.
 3. **Failability is gated, not asserted.** `scripts/test-probe-gate.py` deletes each probe,
-   comments it out, and disguises it five ways, requiring the check to notice every time.
-   Each disguise is defeated by a different part of the check, so sabotaging any one part
-   turns the suite red. It runs inside the gate. Two versions shipped unfailable because
-   "the fix works" was asserted; this one has to demonstrate it on every run.
+   comments it out, renames it, disguises it nine ways, and mutates the manifest three
+   ways, requiring the check to notice every time. It runs inside the gate. Two versions
+   shipped unfailable because "the fix works" was asserted; this one has to demonstrate it
+   on every run.
+
+   Each case is defeated by one identifiable part of the check, so sabotaging **any of the
+   parts the cases target** turns the suite red — thirteen sabotages were run to confirm it.
+   That is a claim about those parts, not about the check as a whole: a first version of
+   this sentence said "any one part", and four sabotages then survived it. Two guards
+   genuinely overlap, and the case covering them removes both.
 4. `preflight.sh` asserts at the end that every declared probe actually reported, and names
    the count of waived probes in its verdict.
 

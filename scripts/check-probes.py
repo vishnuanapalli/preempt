@@ -13,7 +13,8 @@ Two earlier versions of this check searched the probe file's *label text* for th
 name, and both shipped unfailable. The Vercel row was satisfied by the label
 "npx (runs vercel cli)"; the Docker row by a postgres failure message. Deleting all four
 Vercel probes still reported that every service had one. Quoted spans and comments are
-stripped before scanning here, so no label, message, or comment can satisfy a row.
+stripped before scanning here, so an ordinary label, message, or comment cannot satisfy a
+row -- see the limits below for the unusual shell that still can.
 
 Modes:
   --static        Every declared id appears as an outcome call in preflight.sh, and every
@@ -44,6 +45,22 @@ Two things even `--emitted` cannot see:
   - the same, with the call changed to `waive`, which reports, satisfies coverage, and
     does not fail preflight. That is a one-line edit, not an exotic one.
 
+## This is not a shell parser
+
+It reads `preflight.sh` line by line and tracks quotes, comments, and heredocs. That is
+enough for shell anyone would actually write, and every shape below is under test in
+`scripts/test-probe-gate.py`, but the list is what is *known*, not a proof of absence:
+
+  - an indented terminator for a plain `<<` heredoc, which bash does not honour;
+  - a second heredoc opened on the same line as the first;
+  - `$'...\\'...'`, where the escaped quote keeps the string open;
+  - a quoted span abutting a word, which shell concatenates into one token.
+
+Each of those once counted a probe that does not exist. On anything ambiguous the scanner
+errs toward reporting a probe *absent*: a false FAIL is loud and gets fixed, where a false
+PASS is the failure this file exists to prevent. Read that as the design intent, not as a
+guarantee -- the four above were all discovered as counterexamples to it being stated as one.
+
 `scripts/test-probe-gate.py` proves that the failure modes which *are* reachable do fail.
 """
 
@@ -68,82 +85,111 @@ ID_RE = re.compile(rf"^{ID}$")
 CALL_RE = re.compile(rf"(?:^|[\s;&|()])(?:pass|fail|waive)\s+({ID})(?=\s|$)")
 
 # The start of a heredoc, whose body is data rather than code. Matched at the cursor, so
-# it only fires outside quotes. The quote around the terminator is optional in shell and
-# irrelevant here; only the word matters.
-HEREDOC_RE = re.compile(r"<<-?\s*[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?")
+# it only fires outside quotes. Group 1 is the `-` form, which alone permits a tab-indented
+# terminator; group 2 is the terminator word, whose quoting is irrelevant here.
+HEREDOC_RE = re.compile(r"<<(-?)\s*[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?")
+
+# Stands in for a removed quoted span. Deliberately not a space: shell concatenates a
+# quoted span with the word beside it, so `echo "already"pass x:y` is one word `alreadypass`
+# and not a command named `pass`. Substituting a space manufactured that command and counted
+# a probe that does not exist. Substituting nothing would merge tokens the other way, so a
+# character that can be neither whitespace nor part of an id is the only faithful stand-in.
+QUOTED = "\x00"
 
 # A row carrying either marker is exempt from needing a probe. The marker has to be
 # written into the manifest deliberately, next to the reason it is there.
 EXEMPT = ("NOT PROVISIONED", "NO DIRECT PROBE")
 
 
-def strip_code(line: str, quote: str | None = None) -> tuple[str, str | None, str | None]:
-    """Split a shell line into executable text, trailing quote state, and heredoc opener.
+def strip_code(
+    line: str, quote: str | None = None
+) -> tuple[str, str | None, list[tuple[str, bool]]]:
+    """Split a shell line into executable text, trailing quote state, and heredoc openers.
 
     One left-to-right walk does all three, because all three need to know whether the
     cursor is inside a quote. Quoted spans and comments are removed. `quote` carries an
     unterminated string in from the previous line, so the continuation lines of a
-    multi-line assignment are treated as the data they are rather than as code.
+    multi-line assignment are treated as the data they are rather than as code. It is
+    `"`, `'`, or `$'` -- the last because ANSI-C quoting honours `\\'` as a literal quote,
+    where plain `'...'` has no escapes at all and ends at the first `'`.
 
     Heredocs are detected here rather than by scanning the stripped result: the terminator
     is usually quoted (`cat <<'NOTES'`), so by the time quotes are gone there is nothing
-    left to match. That was a real bug, caught by this file's own heredoc mutation case.
+    left to match. All openers on the line are returned, in order, because `cat <<'A' <<'B'`
+    queues two bodies and tracking only the first scans the second as code.
 
-    Ambiguous input fails toward a false FAIL -- a call missed and reported as absent --
-    never toward a false PASS. A `#` inside a double-quoted string ends the line early; an
-    unbalanced quote hides the lines after it; `a << b` as an arithmetic shift would be
-    read as a heredoc. All are loud, and none invents a probe that does not exist.
+    On ambiguity this errs toward reporting a probe absent rather than present, because a
+    false FAIL is loud and a false PASS is the failure this file exists to prevent. It is
+    not a shell parser and does not claim to be: see the module docstring for the shapes
+    that are known to fool it, and `scripts/test-probe-gate.py` for the ones under test.
     """
     out: list[str] = []
-    terminator: str | None = None
+    openers: list[tuple[str, bool]] = []
     i = 0
-    while i < len(line):
+    n = len(line)
+    while i < n:
         c = line[i]
         if quote is not None:
-            if c == "\\" and quote == '"':
+            # Backslash escapes exist inside "..." and $'...', but never inside '...'.
+            if c == "\\" and quote in ('"', "$'") and i + 1 < n:
                 i += 2
                 continue
-            if c == quote:
+            if c == quote[-1]:
                 quote = None
             i += 1
             continue
+        if line.startswith("$'", i):
+            quote = "$'"
+            out.append(QUOTED)
+            i += 2
+            continue
         if c in "\"'":
             quote = c
-            out.append(" ")  # a stripped span still separates two words
+            out.append(QUOTED)
             i += 1
             continue
         if c == "#" and (not out or out[-1].isspace()):
             break
-        if terminator is None and line.startswith("<<", i):
+        # `<<<` is a herestring, not a heredoc: it consumes a word, not the lines below.
+        # All three characters go at once — stepping over one at a time leaves `<<"word"`,
+        # which reads as a heredoc and swallows the rest of the file.
+        if line.startswith("<<<", i):
+            out.append("<<<")
+            i += 3
+            continue
+        if line.startswith("<<", i):
             opened = HEREDOC_RE.match(line, i)
             if opened:
-                terminator = opened.group(1)
-                out.append(" ")
+                openers.append((opened.group(2), opened.group(1) == "-"))
+                out.append(QUOTED)
                 i = opened.end()
                 continue
         out.append(c)
         i += 1
-    return "".join(out), quote, terminator
+    return "".join(out), quote, openers
 
 
 def executable_lines(source: str) -> list[str]:
     """The executable text of each line: heredoc bodies dropped, quote state carried.
 
     A heredoc body is data. Scanning it as code lets `cat <<'NOTES' ... NOTES` hold text
-    that reads as a probe call, which is a false PASS -- the one direction this must never
-    fail in.
+    that reads as a probe call -- a false PASS.
+
+    The terminator must match the line exactly, and only the `<<-` form tolerates leading
+    tabs. Accepting an indented terminator for plain `<<` ends the body early and scans the
+    rest of it as code, which is the same false PASS by a subtler route.
     """
     lines: list[str] = []
     quote: str | None = None
-    terminator: str | None = None
+    pending: list[tuple[str, bool]] = []
     for raw in source.splitlines():
-        if terminator is not None:
-            if raw.strip() == terminator:
-                terminator = None
+        if pending:
+            terminator, dash = pending[0]
+            if (raw.lstrip("\t") if dash else raw) == terminator:
+                pending.pop(0)
             continue
-        code, quote, opened = strip_code(raw, quote)
-        if opened is not None:
-            terminator = opened
+        code, quote, openers = strip_code(raw, quote)
+        pending.extend(openers)
         lines.append(code)
     return lines
 

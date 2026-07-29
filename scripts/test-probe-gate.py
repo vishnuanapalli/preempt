@@ -7,9 +7,17 @@ mutation test: break the probe file in each way that matters and require the che
 notice. It runs inside `scripts/verify.sh`, so a future edit that makes the check vacuous
 again turns the gate red instead of passing quietly.
 
-Each case copies the real tree into a temp directory, mutates only `preflight.sh`, and
-runs the real `check-probes.py` -- not a reimplementation of it. Pure text and python;
-no network.
+Each case copies the real tree into a temp directory, mutates one of the check's **two**
+inputs -- `preflight.sh` or `docs/SERVICES.md` -- and runs the real `check-probes.py`, not
+a reimplementation of it. Pure text and python; no network.
+
+Mutating only `preflight.sh` is not enough, and was the second thing this suite got wrong:
+the guards that stop the check being *vacuous* all live on the manifest side, so they sat
+unexercised while the suite reported itself complete.
+
+A case earns its place by being defeated by one identifiable part of the check. Two of the
+guards genuinely overlap -- delete either the empty-table guard or the vacuity guard and an
+empty manifest still fails; delete both and it passes, which is the case that covers them.
 """
 
 from __future__ import annotations
@@ -40,15 +48,59 @@ def run(cwd: pathlib.Path, *args: str) -> tuple[int, str]:
     return p.returncode, (p.stdout + p.stderr).strip()
 
 
-def sandbox(tmp: pathlib.Path, preflight: str) -> pathlib.Path:
-    """A copy of the tree whose preflight.sh has been replaced with `preflight`."""
+def sandbox(tmp: pathlib.Path, preflight: str, manifest: str | None = None) -> pathlib.Path:
+    """A copy of the tree with preflight.sh -- and optionally SERVICES.md -- replaced.
+
+    The check has two inputs. An earlier version of this suite mutated only preflight.sh,
+    which left every guard on the manifest side unexercised: the empty-table, all-exempt,
+    and blank-Probe-cell guards could all be deleted with this suite still green.
+    """
     box = pathlib.Path(tempfile.mkdtemp(dir=tmp))
     (box / "docs").mkdir()
     (box / "scripts").mkdir()
-    shutil.copy(ROOT / "docs" / "SERVICES.md", box / "docs" / "SERVICES.md")
+    if manifest is None:
+        shutil.copy(ROOT / "docs" / "SERVICES.md", box / "docs" / "SERVICES.md")
+    else:
+        (box / "docs" / "SERVICES.md").write_text(manifest)
     shutil.copy(ROOT / "scripts" / "check-probes.py", box / "scripts" / "check-probes.py")
     (box / "scripts" / "preflight.sh").write_text(preflight)
     return box
+
+
+def edit_manifest(
+    text: str, *, drop_rows: bool = False, all_exempt: bool = False, blank: str | None = None
+) -> str:
+    """Rewrite the services table: drop every row, exempt every row, or blank one Probe cell."""
+    lines = text.splitlines()
+    header_at, data_at, probe_col = None, [], -1
+    for n, line in enumerate(lines):
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if all(set(c) <= set("-: ") and c for c in cells):
+            continue
+        if header_at is None:
+            header_at = n
+            probe_col = [re.sub(r"[*`]", "", c).strip().lower() for c in cells].index("probe")
+        else:
+            data_at.append(n)
+
+    out = []
+    for n, line in enumerate(lines):
+        if n not in data_at:
+            out.append(line)
+            continue
+        if drop_rows:
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        name = re.sub(r"[*`]", "", cells[0]).strip().lower()
+        if all_exempt:
+            cells[probe_col] = "NOT PROVISIONED"
+        elif blank and blank.lower() in name:
+            cells[probe_col] = ""
+        out.append("| " + " | ".join(cells) + " |")
+    return "\n".join(out) + "\n"
 
 
 def main() -> int:
@@ -108,12 +160,37 @@ def main() -> int:
         #    rejected by CALL_RE's command-position prefix class before quote removal is
         #    ever consulted. It went red with the stripping deleted. Hence the mid-string
         #    shape, where the id is preceded by whitespace *inside* the quotes.
+        #
+        #    The last four were live false PASSes, each found by an adversarial review
+        #    rather than by this suite. Every one counted a probe that does not exist, so
+        #    each is now pinned here: bash was run against all four to confirm none of them
+        #    actually executes a probe.
         disguises = [
             ('echo "pass {pid} handled elsewhere"', "as a label", "CALL_RE prefix class"),
             ('echo "done; pass {pid} reported ok"', "mid-string", "strip_code quote removal"),
             ("PROBED_ALREADY={pid}", "as a variable value", "CALL_RE outcome-verb anchor"),
             ('cat <<\'NOTES\'\npass {pid} "noted" "x"\nNOTES', "in a heredoc", "heredoc skipping"),
             ('NOTE="probe notes\npass {pid} was handled"', "in a multi-line string", "quote carry"),
+            # bash ends a plain `<<` body only on an unindented terminator.
+            (
+                'cat <<\'NOTES\'\n  NOTES\npass {pid} "x" "y"\nNOTES',
+                "under an indented heredoc terminator",
+                "exact terminator matching",
+            ),
+            # bash queues both bodies; tracking only the first scans the second as code.
+            (
+                "cat <<'A' <<'B'\nA\npass {pid} \"x\" \"y\"\nB",
+                "in the second of two heredocs",
+                "the heredoc queue",
+            ),
+            # In $'...', \' is a literal quote and the string stays open.
+            (
+                'msg=$\'oops\\\'\npass {pid} "x" "y"\n\'',
+                "inside ANSI-C quoting",
+                "$'...' escape handling",
+            ),
+            # Shell concatenates a quoted span with the word beside it: one token, no command.
+            ('echo "already"pass {pid} done', "abutting a quoted span", "the QUOTED sentinel"),
         ]
         pid = ids[0]
         call = re.compile(rf"(?:^|[\s;&|()])(?:pass|fail|waive)\s+{re.escape(pid)}(?=\s|$)")
@@ -152,11 +229,75 @@ def main() -> int:
         if code == 0:
             failures.append("a probe no row of SERVICES.md declares does not fail the check")
 
+        # 6. The manifest is the check's other input, and the guards that stop the check
+        #    being *vacuous* all live on that side. Mutating only preflight.sh left all
+        #    three untested -- and an empty table beside a preflight with no probes is
+        #    precisely the state a fresh project from the template starts in, so these are
+        #    the guards between that state and a green section 4 at phase 2.
+        manifest = (ROOT / "docs" / "SERVICES.md").read_text()
+        stub = "#!/usr/bin/env bash\nexit 0\n"
+        service = ids[0].split(":")[0]
+        service_calls = re.compile(
+            rf"(?:^|[\s;&|()])(?:pass|fail|waive)\s+{re.escape(service)}:[a-z0-9-]+(?=\s|$)"
+        )
+        manifest_cases = [
+            (
+                edit_manifest(manifest, drop_rows=True),
+                stub,
+                "an empty services table",
+                "the empty-table guard",
+            ),
+            (
+                edit_manifest(manifest, all_exempt=True),
+                stub,
+                "every row marked exempt",
+                "the vacuity guard",
+            ),
+            # The row's probes go too, so the row-level guard is the only thing left to
+            # catch it -- otherwise the undeclared-probe rule would, and this would test
+            # that instead.
+            (
+                edit_manifest(manifest, blank=service),
+                "\n".join(ln for ln in source.splitlines() if not service_calls.search(ln)),
+                f"'{service}' left with a blank Probe cell",
+                "the row-level guard",
+            ),
+        ]
+        for mutated_manifest, preflight, shape, guarded_by in manifest_cases:
+            code, out = run(sandbox(tmp, preflight, manifest=mutated_manifest), "--static")
+            if code == 0:
+                failures.append(
+                    f"{shape} does not fail the check -- {guarded_by} is not doing its job"
+                )
+
+        # 7. A declared id must match the call exactly. Without CALL_RE's trailing boundary
+        #    a longer id in preflight.sh silently satisfies a shorter declared one, so a
+        #    rename drifts away from the manifest without the gate noticing.
+        #
+        #    The suffix must start with a character outside the id charset. `-v2` does not
+        #    isolate anything: `-` is a legal id character, so the greedy match simply takes
+        #    the longer id and the case goes red whether the boundary is there or not. `_`
+        #    stops the match, which is what makes this a test of the boundary.
+        pid = ids[0]
+        renamed = re.sub(
+            rf"((?:^|[\s;&|()])(?:pass|fail|waive)\s+{re.escape(pid)})(?=\s|$)", r"\1_v2", source
+        )
+        if renamed == source:
+            failures.append(f"could not build the rename case for '{pid}'")
+        else:
+            code, out = run(sandbox(tmp, renamed), "--static")
+            if code == 0:
+                failures.append(
+                    f"renaming '{pid}' to '{pid}_v2' in preflight.sh does not fail the check "
+                    f"-- CALL_RE's trailing boundary is not doing its job"
+                )
+
     if failures:
         for f in failures:
             print(f"  {f}")
         return 1
-    print(f"probe check is failable ({len(ids)} probes mutated, 9 cases)")
+    cases = 5 + len(disguises) + len(manifest_cases)
+    print(f"probe check is failable ({len(ids)} probes mutated, {cases} cases)")
     return 0
 
 
