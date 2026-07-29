@@ -4,7 +4,8 @@ Working state for whoever picks this up next, including me in a fresh session. T
 documents in `docs/` are the source of truth for *what* and *why*; this file is only
 *where we stopped*. Delete anything here that has become false rather than letting it rot.
 
-Last updated: 2026-07-29. BLOCK item 1 closed (D-014); item 11 opened by the review of it.
+Last updated: 2026-07-29. BLOCK item 1 fix built (D-014) but unticked pending review;
+item 11 opened by the review of it.
 
 ## Running this autonomously
 
@@ -43,9 +44,9 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       scanning. One shared implementation (`scripts/check-probes.py`) serves the gate,
       preflight's runtime coverage assertion, and the mutation test.
       `scripts/test-probe-gate.py` runs in the gate and proves the check can fail —
-      twenty-three cases mutating **both** of the check's inputs, since the guards against a
+      twenty-six cases mutating **both** of the check's inputs, since the guards against a
       vacuous check live on the manifest side and a first version that mutated only
-      `preflight.sh` left them untested. Fifteen sabotages of the check were run to confirm
+      `preflight.sh` left them untested. Seventeen sabotages of the check were run to confirm
       each targeted part turns the suite red. Ported to the template, still green on a
       fresh run.
       **Residual gap, stated not hidden:** `--static` proves a call exists, not that it is
