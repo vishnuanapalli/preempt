@@ -2,6 +2,9 @@
 .claude/
 CLAUDE.md
 .omc/
+# Written by `vercel link` and `vercel pull`. Holds project/org ids and a copy of
+# project settings; belongs to the machine, not the repository.
+.vercel/
 *.bak
 *.bak.*
 
