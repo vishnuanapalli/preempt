@@ -100,6 +100,21 @@ run_case "per-migration stepping removed" RED \
   "test_the_harness_stepped_every_migration" \
   's = s.replace("    for index, revision in enumerate(chain):", "    for index, revision in enumerate([]):", 1)'
 
+# The chain-stepping logic. With one real migration none of this is reachable, so these
+# three cases are the only thing standing between it and S-010, when it becomes
+# load-bearing. Each is caught by a test that builds a three-migration chain.
+run_case "stepping continues past a migration that failed" RED \
+  "test_a_failure_mid_chain_names_its_migration_and_stops_stepping" \
+  's = s.replace("        if not step.clean:\n            unstepped = tuple(chain[index + 1 :])", "        if False:\n            unstepped = tuple(chain[index + 1 :])", 1)'
+
+run_case "unstepped migrations never reported" RED \
+  "test_a_failure_mid_chain_names_its_migration_and_stops_stepping" \
+  's = s.replace("            unstepped = tuple(chain[index + 1 :])", "            unstepped = ()", 1)'
+
+run_case "chain_ran claims the chain pass ran when it was skipped" RED \
+  "test_a_failure_mid_chain_names_its_migration_and_stops_stepping" \
+  's = s.replace("            chain_ran=False,", "            chain_ran=True,", 1)'
+
 run_case "step failures excluded from the verdict" RED \
   "test_a_failing_step_makes_the_whole_round_trip_not_reversible" \
   's = s.replace("            self.step_reverse_differences\n            + self.step_reapply_differences\n", "", 1)'

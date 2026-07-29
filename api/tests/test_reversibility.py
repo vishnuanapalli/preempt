@@ -615,6 +615,124 @@ def test_the_harness_reports_an_irreversible_migration(shape: str, tmp_path: Pat
     assert diff(before, snapshot(url)) == []
 
 
+# ------------------------------------------------- stepping, on a chain longer than one
+
+# The project has exactly one migration, so everything about stepping a chain — visiting
+# each revision, stopping at the first failure, naming the culprit, reporting the rest as
+# unstepped — is untested by construction. `test_the_harness_stepped_every_migration`
+# passes on a chain of one whether the loop iterates or not. These two build a real chain
+# of three in a temporary version location, which is the only way to exercise it before
+# S-010 lands and makes it load-bearing.
+
+CHAIN_REVISIONS = ("0chain000001", "0chain000002", "0chain000003")
+_DROP_CHAIN_TABLES = (
+    "DROP TABLE IF EXISTS public._rev_chain_1",
+    "DROP TABLE IF EXISTS public._rev_chain_2",
+    "DROP TABLE IF EXISTS public._rev_chain_3",
+)
+
+
+def _write_chain(tmp_path: Path, real_head: str, irreversible_index: int | None) -> list[str]:
+    """Three migrations, each creating its own table. One may be made irreversible.
+
+    Returns the revision ids in chain order. `irreversible_index` is zero-based over
+    CHAIN_REVISIONS; None makes every migration a clean round trip.
+    """
+    previous = real_head
+    for index, revision in enumerate(CHAIN_REVISIONS):
+        table = f"_rev_chain_{index + 1}"
+        drops_nothing = index == irreversible_index
+        (tmp_path / f"chain_{index}.py").write_text(
+            IRREVERSIBLE_MIGRATION.format(
+                revision=revision,
+                down_revision=previous,
+                upgrade=f'op.create_table("{table}", sa.Column("id", sa.Integer(), '
+                "primary_key=True))",
+                downgrade='"""Deliberately drops nothing."""'
+                if drops_nothing
+                else f'op.drop_table("{table}")',
+            )
+        )
+        previous = revision
+    return list(CHAIN_REVISIONS)
+
+
+def _restore_chain(url: str, cfg: Config, real_head: str) -> None:
+    command.stamp(cfg, real_head)
+    for statement in _DROP_CHAIN_TABLES:
+        _execute(url, statement)
+
+
+@pytest.mark.integration
+def test_stepping_visits_every_migration_in_a_chain_of_three(tmp_path: Path) -> None:
+    url = _skip_unless_database()
+    real_head = ScriptDirectory.from_config(alembic_config()).get_current_head()
+    assert real_head is not None
+    before = snapshot(url)
+    chain = _write_chain(tmp_path, real_head, irreversible_index=None)
+    cfg = alembic_config(version_locations=[VERSIONS_DIR, tmp_path])
+
+    try:
+        result = run_round_trip(url, cfg)
+
+        assert [step.revision for step in result.steps] == [real_head, *chain], (
+            "stepping did not visit every migration in order"
+        )
+        assert result.unstepped == ()
+        assert result.chain_ran
+        assert result.reversible, result.all_differences
+        # Three tables, each with a column and a primary-key index and constraint. The
+        # exact number matters less than that coverage scales with the chain rather than
+        # reporting whatever the last step happened to see.
+        assert result.covered >= 3, f"expected at least the three new tables, got {result.covered}"
+    finally:
+        _restore_chain(url, cfg, real_head)
+
+    assert diff(before, snapshot(url)) == []
+
+
+@pytest.mark.integration
+def test_a_failure_mid_chain_names_its_migration_and_stops_stepping(tmp_path: Path) -> None:
+    """The second of three is irreversible. The third must never be stepped.
+
+    Continuing past a failed step would compare the third migration against a database
+    that no longer matches the chain, and report the second migration's damage again under
+    the third's name — a real finding pointing at innocent code.
+    """
+    url = _skip_unless_database()
+    real_head = ScriptDirectory.from_config(alembic_config()).get_current_head()
+    assert real_head is not None
+    before = snapshot(url)
+    chain = _write_chain(tmp_path, real_head, irreversible_index=1)
+    cfg = alembic_config(version_locations=[VERSIONS_DIR, tmp_path])
+
+    try:
+        result = run_round_trip(url, cfg)
+
+        assert not result.reversible
+        stepped = [step.revision for step in result.steps]
+        assert stepped == [real_head, chain[0], chain[1]], (
+            f"stepping should have stopped at the failing migration, got {stepped}"
+        )
+        assert result.unstepped == (chain[2],), (
+            f"the migration after the failure must be reported as unstepped, got {result.unstepped}"
+        )
+        assert not result.chain_ran, (
+            "the chain-level pass must be skipped once a step has failed, or it reports the "
+            "same failure a second time under no revision's name"
+        )
+        assert any(chain[1] in line for line in result.all_differences), (
+            f"the report does not name the failing migration: {result.all_differences}"
+        )
+        assert not any(chain[2] in line for line in result.all_differences), (
+            f"the report blames a migration that was never stepped: {result.all_differences}"
+        )
+    finally:
+        _restore_chain(url, cfg, real_head)
+
+    assert diff(before, snapshot(url)) == []
+
+
 def _restore(url: str, cfg: Config, real_head: str) -> None:
     """Put the database back on the real head, whatever state the sabotage left it in.
 

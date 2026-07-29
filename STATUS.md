@@ -77,18 +77,24 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
 - [ ] **2. S-002's reversibility is vacuous.** Built 2026-07-29, D-015. **Unticked, and the
       only thing outstanding is the re-review.** Round one returned BLOCK — 5 BLOCK, 5 MAJOR,
       8 MINOR, every finding correct — and all of them are fixed at `2bf1c96`. The re-review
-      has been attempted three times and died each time to `API Error: 529 Overloaded`,
+      has been attempted **four** times and died each time to `API Error: 529 Overloaded`,
       which is server-side and unrelated to this repo. Nothing in the work is known to be
       wrong; nothing has cleared it either. **Resume by running `work-breaker` on model opus
-      against `2bf1c96`** — the brief is round two's in the loop's history, and the fixes it
-      needs to check are listed below. Do not tick this box on the strength of a green gate:
-      the gate was green for the version that then collected ten findings.
+      against HEAD** — the brief is in the loop's history, and the fixes it needs to check are
+      listed below. Do not tick this box on the strength of a green gate: the gate was green
+      for the version that then collected ten findings.
+      While the reviewer was unavailable, the one gap it had flagged as unreachable was
+      closed with evidence instead of reasoning: chain stepping. With a single migration
+      every branch that visits the next revision, stops at a failure, names the culprit or
+      reports the rest unstepped was dead code under test — removing the `break` left the
+      suite green. Two tests now build a real three-migration chain in a temporary version
+      location, and mutation cases 6–8 cover it.
       Built as scoped: a reversibility harness rather than a baseline with invented schema.
       `api/tests/reversibility.py` snapshots eleven classes of schema object and steps each
       migration — apply, reverse, re-apply — before exercising the whole chain;
       `api/tests/test_reversibility.py` runs it on every gate invocation with three
       deliberately irreversible migrations, one per failure path;
-      `scripts/sabotage-reversibility.sh` breaks the harness nineteen ways by hand and
+      `scripts/sabotage-reversibility.sh` breaks the harness twenty-two ways by hand and
       requires each to go red *by node id*. Evidence: `audit/REVERSIBILITY.txt`.
       **Coverage is zero and the harness says so.** The baseline creates nothing, so the
       round trip has nothing to reverse. The strict xfail on

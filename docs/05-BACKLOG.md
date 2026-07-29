@@ -44,7 +44,7 @@ never-ship list.
       database — the `db-test` container on 5434, not the Neon branch the criterion above
       still names — reverses it, re-applies it, then exercises the whole chain, and reports
       any schema object the reverse failed to restore. It is proven able to fail by three
-      deliberately irreversible migrations, one per failure path, and by a nineteen-case
+      deliberately irreversible migrations, one per failure path, and by a twenty-two-case
       mutation run over the harness itself — `api/tests/test_reversibility.py`, evidence in
       `audit/REVERSIBILITY.txt`, rationale in D-015.
       **The harness reports coverage, and today it covers nothing:** the baseline creates no
