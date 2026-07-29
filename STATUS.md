@@ -6,6 +6,28 @@ documents in `docs/` are the source of truth for *what* and *why*; this file is 
 
 Last updated: 2026-07-28.
 
+## Running this autonomously
+
+The loop below is the intended way to work this project. It is self-contained: every
+iteration reads state from disk, so it survives a `/clear` and does not depend on any
+conversation. Start it in a **fresh session**.
+
+> /loop Read ~/Desktop/preempt/STATUS.md first and verify it against `git log` and
+> `./scripts/verify.sh` before trusting a word of it. Then do ONE bounded piece of work:
+> the top unresolved item on the Sprint 0 BLOCK list below, or if that list is empty, the
+> next story in docs/05-BACKLOG.md. Run `./scripts/verify.sh` and paste its output —
+> nothing is done until it passes. After any substantive deliverable, run the work-breaker
+> agent on model opus and fix every BLOCK finding before moving on; never override a BLOCK.
+> At each sprint or phase boundary, run the retro-scribe agent and let it write
+> docs/10-FRICTION.md before crossing. Commit and push each iteration, and update STATUS.md
+> with where you stopped and what is now blocked. If an item is blocked on the owner
+> (database URL, uptime-monitor account, the 24-hour CU-hours window), record it, leave its
+> criterion unticked, and move to the next item rather than waiting. HARD STOP: write no
+> frontend, UI, or 06-UI-SPEC implementation — when the work reaches that boundary, stop
+> the loop and report. Never sleep and never poll.
+
+Authority for this is D-013. The frontend stop is not delegated and not negotiable.
+
 ## Current position
 
 **Phase 4 complete** (`docs/.phase` = 4). All planning documents are written. Sprint 0 is

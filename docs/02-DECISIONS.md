@@ -568,3 +568,52 @@ A queue service for delivery. It is the right tool and it is another external de
 another account, and another free-tier limit to inventory. The outbox needs no service that
 the project does not already depend on, and the scheduled invocation is required for
 ingestion regardless.
+
+---
+
+## D-013 — The sprint go-ahead is delegated to the review agents
+
+- **Date:** 2026-07-29
+- **Status:** Accepted
+- **Amends:** the hard-stop clause of the phase discipline. D-011's precedent applies —
+  a change to what "done" means is a decision, not a process tweak.
+
+**Context**
+
+Every sprint was to end at demo, adversarial review, and an explicit owner go-ahead. In
+practice the owner is a bottleneck at every boundary, and Sprint 0 exposed a worse problem:
+it *cannot* close on the owner's word alone. Three of its criteria need a secret only the
+owner holds, an account only the owner can create, and twenty-four hours of elapsed time.
+A contract that requires a go-ahead at a boundary that cannot be reached produces idling,
+not control.
+
+**Decision**
+
+The go-ahead is delegated to the agents. `work-breaker` must return PASS to cross a sprint
+boundary. A BLOCK means the findings get fixed and the review runs again — it is never
+overridden, and "the reviewer was wrong" is a finding to be evidenced, not a verdict to be
+waved through. `retro-scribe` writes the boundary retro first, so the crossing is recorded
+before it happens rather than reconstructed later.
+
+Owner-blocked criteria do not gate the crossing. They stay unticked, stay listed, and the
+work moves on.
+
+**One hard stop remains, and it is not delegated.** The frontend. Work stops at the UI
+boundary and hands back, because the owner builds that interface in dialogue rather than
+reviewing a finished thing.
+
+**Consequences**
+
+The reviewer becomes load-bearing in a way it was not before: it is now the only thing
+standing between a bad sprint and the next one. That is a real risk and it is accepted with
+eyes open, on the evidence of its first two runs — it caught a gate check that could not
+fail, a vacuous reversibility claim, an unused confusable dependency, and a ticked box
+contradicting its own caption. It found more than the sessions it reviewed did.
+
+The mitigation is that everything remains revertable: each iteration is a small gated
+commit, and a boundary crossed wrongly is visible in the log rather than lost.
+
+**Not adopted.** Letting a BLOCK be overridden after N attempts, on the model of the Stop
+hook's three-strike escape. The Stop hook's escape exists so a session cannot hard-lock a
+human out of their own machine. Nothing here is locked: a persistent BLOCK means the work
+is not done, and the correct response is to stop and say so.
