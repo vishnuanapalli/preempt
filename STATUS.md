@@ -8,6 +8,14 @@ Last updated: 2026-07-29. BLOCK item 1 closed (D-014, work-breaker PASS). Item 2
 fixed against a BLOCK review (D-015); re-review pending, and its box stays unticked until
 that returns PASS. Items 11 and 12 were opened by the reviews of item 1; item 13 by item 2's.
 
+**The loop stopped here deliberately, and not on a frontend boundary.** `work-breaker` has
+been unavailable for five consecutive attempts (`529 Overloaded`, both Opus and Sonnet). The
+contract in CLAUDE.md makes that agent's PASS the gate on crossing anything, so producing
+further deliverables would pile up unreviewed work — which is the risk this whole process
+exists to prevent, and it is the owner's call whether to proceed without a reviewer. Restart
+with the same `/loop` command once the API is healthy; the first thing it should do is the
+re-review of item 2 against HEAD.
+
 ## Running this autonomously
 
 The loop below is the intended way to work this project. It is self-contained: every
@@ -77,8 +85,10 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
 - [ ] **2. S-002's reversibility is vacuous.** Built 2026-07-29, D-015. **Unticked, and the
       only thing outstanding is the re-review.** Round one returned BLOCK — 5 BLOCK, 5 MAJOR,
       8 MINOR, every finding correct — and all of them are fixed at `2bf1c96`. The re-review
-      has been attempted **four** times and died each time to `API Error: 529 Overloaded`,
-      which is server-side and unrelated to this repo. Nothing in the work is known to be
+      has been attempted **five** times and died each time to `API Error: 529 Overloaded`,
+      server-side and unrelated to this repo. The fifth attempt ran on Sonnet rather than
+      Opus to rule out model-specific capacity; it failed the same way, so the fault is the
+      subagent path or general API load, not the model routing in CLAUDE.md. Nothing in the work is known to be
       wrong; nothing has cleared it either. **Resume by running `work-breaker` on model opus
       against HEAD** — the brief is in the loop's history, and the fixes it needs to check are
       listed below. Do not tick this box on the strength of a green gate: the gate was green
