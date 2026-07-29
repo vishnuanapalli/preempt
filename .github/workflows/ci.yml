@@ -20,7 +20,10 @@ jobs:
           # the default shallow clone.
           fetch-depth: 0
 
-      - uses: astral-sh/setup-uv@v9
+      # Pinned to an exact tag: setup-uv publishes v9.0.0 but no moving `v9` alias, so
+      # `@v9` fails to resolve. A release tag and a resolvable action ref are not the
+      # same thing. Dependabot bumps this monthly.
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
       - run: uv sync --frozen
