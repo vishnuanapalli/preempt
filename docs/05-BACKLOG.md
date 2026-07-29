@@ -63,7 +63,18 @@ never-ship list.
       `docs/SERVICES.md` until Sprint 1. Current state lives in `audit/PREFLIGHT.txt` —
       deliberately not restated here, because a pasted response is stale the moment the
       next deployment lands.
-- [ ] **Measured and recorded:** cold-start duration after one hour idle
+- [x] **Measured and recorded:** cold-start duration after one hour idle.
+      2026-07-29, after 65 minutes with no request: `total=0.400s ttfb=0.398s`, HTTP 200.
+      Warm request immediately after: `total=0.231s`. Cache-busting query string on both,
+      so the CDN did not serve them.
+      **Read this with its caveat.** D-010 predicted 1–2s and `04-PLAN.md` treats >5s as
+      the risk threshold, so the number clears the bar comfortably — but a 169 ms gap
+      between "cold" and "warm" is small for a Python cold start, and nothing here proves
+      the platform actually evicted the instance during those 65 minutes. The honest claim
+      is: *after an hour of no traffic the first request took 400 ms.* Whether that is a
+      true cold start is unverified, and a lower bound on the real figure.
+      No ADR: reality did not contradict `01-DESIGN.md`, it beat it. Recorded here rather
+      than silently improving the design's number.
 - [ ] **Measured and recorded:** CU-hours consumed in the first 24 hours, extrapolated to a month
 - [ ] If either measurement contradicts `01-DESIGN.md`, an ADR is written — not a silent adjustment
 
