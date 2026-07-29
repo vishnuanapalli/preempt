@@ -47,19 +47,27 @@ Two things even `--emitted` cannot see:
 
 ## This is not a shell parser
 
-It reads `preflight.sh` line by line and tracks quotes, comments, and heredocs. That is
-enough for shell anyone would actually write, and every shape below is under test in
-`scripts/test-probe-gate.py`, but the list is what is *known*, not a proof of absence:
+It reads `preflight.sh` as logical lines and tracks quotes, comments, heredocs, and
+backslash continuations. Every shape below is under test in `scripts/test-probe-gate.py`,
+and each one *once counted a probe that does not exist*:
 
+  - an argument that merely follows whitespace, as in `echo hi pass a:b`, where the first
+    word of the command is `echo` and `pass` is data;
+  - a line continued from the one above it, whose first word is likewise an argument;
   - an indented terminator for a plain `<<` heredoc, which bash does not honour;
+  - a heredoc whose terminator begins with a digit, or holds characters a bare word cannot;
   - a second heredoc opened on the same line as the first;
   - `$'...\\'...'`, where the escaped quote keeps the string open;
   - a quoted span abutting a word, which shell concatenates into one token.
 
-Each of those once counted a probe that does not exist. On anything ambiguous the scanner
-errs toward reporting a probe *absent*: a false FAIL is loud and gets fixed, where a false
-PASS is the failure this file exists to prevent. Read that as the design intent, not as a
-guarantee -- the four above were all discovered as counterexamples to it being stated as one.
+That list is what is *known*, and it grew every time somebody went looking -- twice by
+adversarial review after this file claimed to be safe. Treat it as evidence that the list
+is incomplete rather than as a bound on how incomplete.
+
+On anything ambiguous the scanner errs toward reporting a probe *absent*: a false FAIL is
+loud and gets fixed, where a false PASS is the failure this file exists to prevent. That is
+the design intent and not a guarantee -- every shape above was a counterexample to it being
+stated as one.
 
 `scripts/test-probe-gate.py` proves that the failure modes which *are* reachable do fail.
 """
@@ -82,12 +90,21 @@ ID_RE = re.compile(rf"^{ID}$")
 # An outcome call: pass/fail/waive at the start of a command, id as the first argument.
 # Applied only to source with quoted spans already removed, so an id appearing inside a
 # label is invisible here -- which is the whole point.
-CALL_RE = re.compile(rf"(?:^|[\s;&|()])(?:pass|fail|waive)\s+({ID})(?=\s|$)")
+#
+# A command starts at the beginning of a logical line, after a separator, or after one of
+# the keywords that introduce one. Merely being preceded by whitespace is NOT enough: an
+# earlier version accepted that, so `echo hi pass a:b` counted a probe where `pass` is an
+# argument to echo, and any line continued from the one above counted as a fresh command.
+CALL_RE = re.compile(
+    rf"(?:^|[;&|(){{}}]|\b(?:then|else|elif|do)\b)\s*(?:pass|fail|waive)\s+({ID})(?=\s|$)"
+)
 
-# The start of a heredoc, whose body is data rather than code. Matched at the cursor, so
-# it only fires outside quotes. Group 1 is the `-` form, which alone permits a tab-indented
-# terminator; group 2 is the terminator word, whose quoting is irrelevant here.
-HEREDOC_RE = re.compile(r"<<(-?)\s*[\"']?([A-Za-z_][A-Za-z0-9_]*)[\"']?")
+# The start of a heredoc, whose body is data rather than code. Matched at the cursor, so it
+# only fires outside quotes. Group 1 is the `-` form, which alone permits a tab-indented
+# terminator. A quoted terminator may hold anything -- `<<'EOF.txt'` is legal -- while an
+# unquoted one is a bare word, and it may begin with a digit: `<<'9NOTES'` is a real heredoc
+# that an earlier letters-only pattern did not track, leaving its body scanned as code.
+HEREDOC_RE = re.compile(r"<<(-?)\s*(?:'([^']*)'|\"([^\"]*)\"|([A-Za-z0-9_]+))")
 
 # Stands in for a removed quoted span. Deliberately not a space: shell concatenates a
 # quoted span with the word beside it, so `echo "already"pass x:y` is one word `alreadypass`
@@ -160,7 +177,9 @@ def strip_code(
         if line.startswith("<<", i):
             opened = HEREDOC_RE.match(line, i)
             if opened:
-                openers.append((opened.group(2), opened.group(1) == "-"))
+                quoted_sq, quoted_dq, bare = opened.group(2, 3, 4)
+                word = quoted_sq if quoted_sq is not None else quoted_dq
+                openers.append((word if word is not None else bare, opened.group(1) == "-"))
                 out.append(QUOTED)
                 i = opened.end()
                 continue
@@ -182,6 +201,7 @@ def executable_lines(source: str) -> list[str]:
     lines: list[str] = []
     quote: str | None = None
     pending: list[tuple[str, bool]] = []
+    continued = False
     for raw in source.splitlines():
         if pending:
             terminator, dash = pending[0]
@@ -190,7 +210,20 @@ def executable_lines(source: str) -> list[str]:
             continue
         code, quote, openers = strip_code(raw, quote)
         pending.extend(openers)
-        lines.append(code)
+
+        # A line ending in an unescaped backslash continues the one below it, so the next
+        # line's first word is an argument rather than a command. Joining them is what lets
+        # CALL_RE's command-position rule see that; scanning them apart made every
+        # continuation line look like a fresh command start.
+        trimmed = code.rstrip()
+        continues = trimmed.endswith("\\") and not trimmed.endswith("\\\\")
+        if continues:
+            code = trimmed[:-1]
+        if continued and lines:
+            lines[-1] += code
+        else:
+            lines.append(code)
+        continued = continues
     return lines
 
 

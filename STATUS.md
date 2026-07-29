@@ -42,20 +42,23 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       scanning. One shared implementation (`scripts/check-probes.py`) serves the gate,
       preflight's runtime coverage assertion, and the mutation test.
       `scripts/test-probe-gate.py` runs in the gate and proves the check can fail —
-      seventeen cases mutating **both** of the check's inputs, since the guards against a
+      twenty-three cases mutating **both** of the check's inputs, since the guards against a
       vacuous check live on the manifest side and a first version that mutated only
-      `preflight.sh` left them untested. Thirteen sabotages of the check were run to confirm
+      `preflight.sh` left them untested. Fifteen sabotages of the check were run to confirm
       each targeted part turns the suite red. Ported to the template, still green on a
       fresh run.
       **Residual gap, stated not hidden:** `--static` proves a call exists, not that it is
       reached; probes hidden in an uncalled function, an `if false` branch, below `exit 0`,
       or behind `:` still count. `--emitted` proves reachability and preflight asserts it —
       but nothing automated runs preflight. See D-014 and the `check-probes.py` docstring.
-      **Review state:** two rounds of `work-breaker` BLOCK, both correct, both fixed — round
-      one caught a mutation case that could not fail, round two caught the suite testing only
-      one of the check's two inputs. A third review of `88e7a3e` was requested and had not
-      returned when this was written. The ticked box rests on the evidence in this entry, not
-      on a PASS verdict; if the third review lands a BLOCK, untick it.
+      **Review state: `work-breaker` PASS on `88e7a3e`,** after two rounds of BLOCK that
+      were both correct and both fixed — round one caught a mutation case that could not
+      fail, round two caught the suite testing only one of the check's two inputs. Its three
+      remaining MINOR findings are also fixed: the suite now pins that the *Probe column* is
+      read rather than the whole row, and the scanner handles backslash continuations and
+      digit- or dot-terminated heredocs. Chasing those exposed a plainer defect neither
+      review had named — `echo hi pass a:b` counted a probe, because any preceding whitespace
+      was treated as command position. 23 cases; 15 sabotages run, all caught.
 - [ ] **2. S-002's reversibility is vacuous.** `api/alembic/versions/cdf9e1c21ca7_baseline.py`
       has `upgrade()` and `downgrade()` both `pass`. The round-trip was run and reported OK;
       it proves nothing. Either a real baseline migration, or the claim comes down.

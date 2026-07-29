@@ -68,9 +68,19 @@ def sandbox(tmp: pathlib.Path, preflight: str, manifest: str | None = None) -> p
 
 
 def edit_manifest(
-    text: str, *, drop_rows: bool = False, all_exempt: bool = False, blank: str | None = None
+    text: str,
+    *,
+    drop_rows: bool = False,
+    all_exempt: bool = False,
+    blank: str | None = None,
+    move_ids: str | None = None,
 ) -> str:
-    """Rewrite the services table: drop every row, exempt every row, or blank one Probe cell."""
+    """Rewrite the services table.
+
+    `move_ids` shifts a row's probe ids out of the Probe cell into a neighbouring one,
+    which is the original label-text defect wearing the manifest's clothes: prose standing
+    in for a declaration. It pins that the *column* is what is read, not the row.
+    """
     lines = text.splitlines()
     header_at, data_at, probe_col = None, [], -1
     for n, line in enumerate(lines):
@@ -98,6 +108,10 @@ def edit_manifest(
         if all_exempt:
             cells[probe_col] = "NOT PROVISIONED"
         elif blank and blank.lower() in name:
+            cells[probe_col] = ""
+        elif move_ids and move_ids.lower() in name:
+            spare = 1 if probe_col != 1 else 2
+            cells[spare] = f"{cells[spare]} -- probes: {cells[probe_col]}"
             cells[probe_col] = ""
         out.append("| " + " | ".join(cells) + " |")
     return "\n".join(out) + "\n"
@@ -190,7 +204,39 @@ def main() -> int:
                 "$'...' escape handling",
             ),
             # Shell concatenates a quoted span with the word beside it: one token, no command.
-            ('echo "already"pass {pid} done', "abutting a quoted span", "the QUOTED sentinel"),
+            ('echo "already"pass {pid} done', "abutting a quoted span", "command-position rule"),
+            # The same concatenation on the other side: bash reads one argument `<pid>x`, so
+            # no probe with this id runs. Only the sentinel sees that -- substituting a space
+            # for the quoted span would leave the id looking correctly terminated.
+            (
+                'pass {pid}"x" "y"',
+                "with its id running into a quoted span",
+                "the QUOTED sentinel",
+            ),
+            # `pass` here is an argument to echo -- preceded by whitespace, but not a command.
+            (
+                "echo noted pass {pid} done",
+                "as an argument mid-command",
+                "CALL_RE's command-position rule",
+            ),
+            # A trailing backslash makes the next line arguments of the same command.
+            (
+                'echo "noted" \\\npass {pid} "x" "y"',
+                "on a continued line",
+                "continuation joining",
+            ),
+            # A bare heredoc terminator may begin with a digit.
+            (
+                'cat <<\'9NOTES\'\npass {pid} "x" "y"\n9NOTES',
+                "in a digit-terminated heredoc",
+                "the heredoc terminator pattern",
+            ),
+            # A quoted terminator may hold what a bare word cannot.
+            (
+                'cat <<\'EOF.txt\'\npass {pid} "x" "y"\nEOF.txt',
+                "in a dotted-terminator heredoc",
+                "quoted heredoc terminators",
+            ),
         ]
         pid = ids[0]
         call = re.compile(rf"(?:^|[\s;&|()])(?:pass|fail|waive)\s+{re.escape(pid)}(?=\s|$)")
@@ -261,6 +307,15 @@ def main() -> int:
                 "\n".join(ln for ln in source.splitlines() if not service_calls.search(ln)),
                 f"'{service}' left with a blank Probe cell",
                 "the row-level guard",
+            ),
+            # The ids move out of the Probe cell into a neighbouring column as prose.
+            # Reading the whole row would satisfy the declaration from that prose, which is
+            # the original label-text defect wearing the manifest's clothes.
+            (
+                edit_manifest(manifest, move_ids=service),
+                source,
+                f"'{service}' declaring its ids outside the Probe column",
+                "reading the Probe column rather than the whole row",
             ),
         ]
         for mutated_manifest, preflight, shape, guarded_by in manifest_cases:
