@@ -8,7 +8,13 @@ negotiated afterwards when it is inconvenient.
 A story is done when every one of these is true. Not most.
 
 1. The acceptance criteria in `05-BACKLOG.md` are met, proven by a test.
-2. `./scripts/verify.sh` passes, and its output is on record.
+2. `./scripts/verify.sh` passes, and its output is on record **in `audit/`** — a dated
+   artifact naming the commit and the command, not a paste into a living document.
+   `audit/CI-RED.txt` holds the run where the gate was seen to fail, which is the half
+   that matters: a gate nobody has watched fail is indistinguishable from one that
+   cannot. `docs/DEMO.md` deliberately holds no output, and for two years that read as a
+   contradiction of this item — it is not, because the demo is a path to run and `audit/`
+   is the record. Saying so here is what makes this criterion checkable.
 3. New behaviour has a test that **fails without the change**. A test that passes against
    the unfixed code proves nothing.
 4. Anything that could not be verified is written down as unverified, with the reason.

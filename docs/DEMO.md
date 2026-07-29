@@ -5,7 +5,19 @@ produced, ending in a state they can judge.
 
 **No command output is pasted here.** It goes stale within minutes of the next deployment,
 and a document that reads as evidence for something no longer true is worse than one that
-says nothing. Run the commands; `audit/PREFLIGHT.txt` holds the last recorded run.
+says nothing. Run the commands.
+
+**That is not the same as holding no record.** `03-QUALITY.md` DoD 2 requires gate output on
+record, and this file refusing to hold it looked like a contradiction of that until both were
+made explicit. The record lives in `audit/`, where each artifact is dated and names the commit
+it was produced against — a snapshot of a moment, not a live value pretending to be current:
+
+| Artifact | What it records |
+|----------|-----------------|
+| `audit/CI-RED.txt` | the run where the gate was **seen to fail**, and the green run it is paired with |
+| `audit/PREFLIGHT.txt` | the last service-probe run |
+| `audit/REVERSIBILITY.txt` | the migration harness proven able to fail |
+| `audit/COLD-START.txt` | the cold-start attempt, and what it does not establish |
 
 ---
 
@@ -24,7 +36,10 @@ database yet. `/ready` returns nulls by design — Sprint 1 gives it something t
 ./scripts/verify.sh                 # four sections, expect VERIFY: PASS
 ```
 
-It is only worth trusting because it has been seen to go red. Break something and watch:
+It is only worth trusting because it has been seen to go red — in CI, not just locally.
+`audit/CI-RED.txt` records that run: lint broken on a throwaway branch, `VERIFY: FAIL`,
+workflow conclusion `failure`, branch deleted afterwards so no red commit sits on `main`.
+Reproduce it locally in one line:
 
 ```sh
 mv docs/10-FRICTION.md /tmp/ && ./scripts/verify.sh ; mv /tmp/10-FRICTION.md docs/

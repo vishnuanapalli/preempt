@@ -120,9 +120,18 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       preflight probe (`docker:postgres-test` now), and `S-006` — a story that has never
       existed — was cited in six files as the trigger for the harness becoming load-bearing.
       The schema story is **S-010**.
-- [ ] **3. S-001 has no evidence artifact, and its deliverable refuses to hold one.**
-      `03-QUALITY.md` DoD 2 requires verify.sh output on record; `docs/DEMO.md` says "no
-      command output is pasted here". Resolve the contradiction, then record the red-CI run.
+- [x] **3. S-001 had no evidence artifact, and its deliverable refused to hold one.** Closed
+      2026-07-29. **The red run is real:** lint broken on a throwaway branch, run
+      `30493554151` → `E401`/`F401` → `FAIL ruff`, `FAIL format`, `VERIFY: FAIL`, workflow
+      conclusion `failure`, `gh run watch --exit-status` exit 1. Branch and commit deleted
+      afterwards, so no red commit sits on `main` and no revert pollutes its history.
+      Recorded in `audit/CI-RED.txt` together with the green run it is paired with — one shows
+      the gate can fail, both show it discriminates.
+      The contradiction was narrower than it looked and neither side was wrong: the demo is a
+      path to run, `audit/` is the record, and neither document said so. DoD 2 now names
+      `audit/`; `DEMO.md` carries the table of what each artifact records.
+      Stated in the artifact, not hidden: only section 3 has been seen to turn a CI run red.
+      **Unreviewed**, per D-016 rule 2.
 - [x] **4. Stale D-007/D-008 orders.** Closed 2026-07-29. `04-PLAN.md` Sprint 2 and Sprint 3
       now order D-012's database-backed rate limiting and transactional outbox, and the risk
       table distinguishes D-007's *principle* (which stands) from its mechanism (superseded).

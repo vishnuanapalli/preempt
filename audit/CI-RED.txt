@@ -1,0 +1,81 @@
+The gate turns CI red — 2026-07-29
+==================================
+
+WHAT THIS IS: S-001's third criterion, "deliberately breaking lint turns CI red; this is
+verified once, by doing it". This is that run. It is the evidence `03-QUALITY.md` DoD 2
+requires be on record, and it exists because a gate nobody has ever seen fail is
+indistinguishable from a gate that cannot.
+
+The first item on this project's never-ship list is a CI that can lie: in prior work in
+this domain a `verify` target echoed a placeholder and re-ran lint, appeared in no
+workflow, and four sprints were signed off against it. Running the gate green proves
+nothing about that failure mode. Running it red does.
+
+
+Method
+------
+
+Lint was broken on a throwaway branch rather than on `main`, so no red commit lands on the
+default branch and no revert is needed in its history. `ci.yml` triggers on
+`branches: ["**"]`, so a branch push runs the same workflow.
+
+    git checkout -b prove-ci-fails
+    # appended `import os,sys` to api/app/main.py — F401 twice, E401 once
+    git commit -am "test(ci): prove the gate turns CI red — S-001, to be reverted"
+    git push -u origin prove-ci-fails
+    gh run watch <run> --exit-status          # exit 1
+    git checkout main
+    git push origin --delete prove-ci-fails   # branch and its commit are gone
+    git branch -D prove-ci-fails
+
+Run `30493554151`, branch `prove-ci-fails`, commit `ea0aa7b` — both deleted afterwards, so
+the run is the only surviving artifact. `gh run view 30493554151` still resolves.
+
+
+Result — exit 1
+---------------
+
+    E401 [*] Multiple imports on one line
+    F401 [*] `os` imported but unused
+    F401 [*] `sys` imported but unused
+      FAIL  ruff
+      FAIL  format
+    VERIFY: FAIL
+
+`gh run watch --exit-status` returned 1. The gate reported `VERIFY: FAIL`, section 3 failed
+on both `ruff` and `format`, and the workflow conclusion was `failure`.
+
+
+The green run it is paired with
+------------------------------
+
+A red run alone shows the gate can fail. Both together show it discriminates. Run
+`30493278207`, on `41b1e85`:
+
+    42 passed, 1 xfailed, 1 warning in 9.07s
+    VERIFY: PASS
+
+That run also settled a separate question: it is the first in which the migration
+integration tests actually executed in CI rather than skipping, because the same commit
+added the test-database service container. Thirteen tests, zero skips, byte-identical to
+local. Before it, the whole reversibility harness was inert in the one place the gate is
+enforced on every push. See D-015, D-016 and BLOCK item 13.
+
+
+What this does not establish
+----------------------------
+
+- **That every section of the gate can fail in CI.** Lint was broken; the attribution,
+  secret, document, phase and process sections were not. Each is exercised locally by its
+  own tests (`scripts/test-probe-gate.py` covers the probe check with 36 cases), but only
+  section 3 has been seen to turn a CI run red.
+- **That CI would catch a broken test as opposed to broken lint.** Same run, different
+  section; not separately demonstrated.
+- **Anything about the deployment.** `ignoreCommand` skips deploys that cannot change the
+  artifact, and this branch touched `api/`, so it would not have been skipped — but no
+  deployment was checked either way.
+- **The `1 warning` in the green run** is a `StarletteDeprecationWarning`: starlette's
+  `TestClient` now recommends `httpx2` over `httpx`. Recorded rather than acted on —
+  `httpx2` was removed from this project on 2026-07-25 as "unused, confusable, four days
+  old", and the toolchain now recommending it is a reason to revisit that with a decision
+  entry, not a reason to swap a dependency in passing.
