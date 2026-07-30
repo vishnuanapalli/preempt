@@ -228,9 +228,19 @@ without it.
 ### S-014 — Provenance is structural
 **MUST** · depends on S-013
 
-- [ ] Every observation row carries its source
-- [ ] The column is non-nullable at the database level, not only in the model
-- [ ] A test attempting to insert without provenance fails
+- [x] Every observation row carries its source — on all three fact tables, not just
+      `price_metric`. The table list is read from the models, so a fourth fact table is covered
+      the day it is added rather than the day someone remembers
+- [x] The column is non-nullable **at the database level**, verified by reading
+      `information_schema.columns` rather than by trusting the model. `nullable=False` in
+      SQLAlchemy and `NOT NULL` in Postgres are different facts: the first is a promise this
+      application makes, only the second survives a migration or a psql session
+- [x] A test attempting to insert without provenance fails, in raw SQL that goes around the
+      application entirely. Four shapes, because non-null alone is not enough: column omitted,
+      explicit `NULL`, an unrecognised value like `'probably real'` — which would otherwise join
+      the measured rows in any query filtering on known values — and, on the other side, both
+      valid sources accepted. That last one is what distinguishes a correctly strict constraint
+      from one that rejects everything and would pass all three negative tests
 
 ### S-015 — Retention and the row budget
 **MUST** · depends on S-013
