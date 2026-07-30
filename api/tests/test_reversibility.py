@@ -5,9 +5,9 @@ exits 0 against a migration whose `upgrade()` and `downgrade()` are both `pass`,
 exactly what this project's baseline is, and it was reported as demo evidence. So the useful
 question is not "are the migrations reversible" but "would this notice if they were not".
 
-Four differ tests need no database. Two run against the real test database: the round trip,
-and one deliberately irreversible migration that must be reported as such — a check nobody
-has watched fail is indistinguishable from one that cannot.
+Six tests need no database. Three run against the real test database: the round trip, its
+coverage, and one deliberately irreversible migration that must be reported as such — a
+check nobody has watched fail is indistinguishable from one that cannot.
 
 Nothing here proves the migrations are reversible *yet*: the baseline creates no schema
 objects, so `covered` is 0. The strict xfail says so and fails the day S-010 adds a table,
@@ -37,6 +37,7 @@ from tests.reversibility import (
     diff,
     reachable,
     run_round_trip,
+    same_database,
     snapshot,
 )
 
@@ -128,6 +129,12 @@ def _skip_unless_database() -> str:
     url = settings.test_database_url
     if not url:
         pytest.skip("PREEMPT_TEST_DATABASE_URL unset, so reversibility is UNPROVEN here")
+    # Not a skip. Everything below drives this database to `base`.
+    if settings.database_url and same_database(settings.database_url, url):
+        pytest.fail(
+            "PREEMPT_TEST_DATABASE_URL names the same host, port and database as "
+            "PREEMPT_DATABASE_URL. This suite runs `alembic downgrade base` against it."
+        )
     why = reachable(url)
     if why is not None:
         pytest.skip(
@@ -189,6 +196,11 @@ def test_an_irreversible_migration_is_reported(tmp_path: Path) -> None:
 
     try:
         result = run_round_trip(url, cfg)
+        # This line is what makes the two below mean anything. Both of them are satisfied by
+        # alembic's DuplicateTableError text alone, so with `snapshot()` gutted the suite was
+        # byte-identical to healthy: 8 passed, 1 xfailed. It existed before the trim and was
+        # deleted with the machinery around it.
+        assert result.covered >= 1, "the injected migration created no schema object to compare"
         assert not result.reversible, "an irreversible migration passed — the harness cannot fail"
         assert any(PROBE_TABLE in line for line in result.differences), (
             f"the harness failed but did not name the table left behind: {result.differences}"

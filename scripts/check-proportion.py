@@ -22,9 +22,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-#: Generous on purpose. A healthy mature project sits near 1:1 or 2:1; anything under this
-#: is not worth an argument. It is set to catch 5:1, not to police 2.1:1.
-CEILING = 2.0
+#: Generous on purpose. A healthy mature project sits near 1:1 or 2:1; this is set to catch
+#: 5:1, not to police 2.1:1.
+#:
+#: It was 2.0 for one commit, which was a mistake worth recording: the post-trim ratio was
+#: 1.9967, so the ceiling sat *at* the achieved value and left one line of headroom. That
+#: turns a proportionality budget into a ratchet — the next necessary fix breaches it, and
+#: the note below forbids raising it, so the only legal move is deleting something
+#: load-bearing. Found by review; see D-018.
+#:
+#: The distinction that keeps this honest: setting a ceiling correctly is not the same as
+#: raising one to avoid deleting bloat. The first is allowed once, with a reason on record.
+#: The second is what R12 forbids. If you are here because the number is inconvenient,
+#: you are doing the second one.
+CEILING = 2.5
 
 
 def count(paths: list[Path]) -> tuple[int, dict[str, int]]:
@@ -50,8 +61,10 @@ def main() -> int:
     ratio = tests / app
     verdict = "PASS" if ratio <= CEILING else "FAIL"
     print(
+        # Two decimals, not one: `:.1f` printed 1.9967 as "2.0:1" and hid that the margin
+        # was a single line.
         f"{verdict}  verification {tests} lines / application {app} lines "
-        f"= {ratio:.1f}:1 (ceiling {CEILING}:1)"
+        f"= {ratio:.2f}:1 (ceiling {CEILING}:1, headroom {int(app * CEILING) - tests} lines)"
     )
 
     if verdict == "FAIL":

@@ -873,3 +873,33 @@ depends on entirely was never placeholder-scanned or length-checked, and the fri
 would not be checked at the phase it becomes due. Both rows are added. This is a
 consequence of the gate being copied from a template and then edited in place — the drift
 is invisible unless someone diffs the two, and nothing does.
+
+## D-018 — The proportionality ceiling is a budget, not a ratchet
+
+- **Date:** 2026-07-29
+- **Status:** Accepted
+- **Amends** D-016, which introduced the cap. Recorded because D-011 makes a gate change a
+  decision, and because the mistake is more instructive than the fix.
+
+**Context.** `scripts/check-proportion.py` shipped with `CEILING = 2.0`. The post-trim ratio
+was 1.9967 — so the ceiling sat *at* the value just achieved, leaving one line of headroom,
+and `:.1f` printed it as "2.0:1" which hid that. The review then produced three BLOCK
+findings whose fixes were about twenty lines. Every one of them breached the ceiling, and the
+script's own text forbids raising it. The only legal move left was deleting something
+load-bearing to make room for a safety fix.
+
+A ceiling set at the achieved value is not a budget. It is a ratchet, and it converts the
+first necessary change into a violation.
+
+**Decision.** `CEILING = 2.5`, and the output prints two decimals plus the remaining headroom
+in lines, so the margin is visible rather than rounded away. Current: 636 against 300, 2.12:1,
+114 lines spare.
+
+**And the distinction that keeps this from being a loophole**, written into the script beside
+the constant: setting a ceiling correctly is not the same as raising one to avoid deleting
+bloat. The first is allowed once, with a reason on record. The second is what R12 forbids. If
+you are reading this because the number is inconvenient, you are doing the second one.
+
+**What it does not change.** D-016's rules stand, and the resolutions the script names —
+delete verification for code that does not exist, or defer the criterion — remain the first
+things to try. The ratio is still enforced on every gate run.

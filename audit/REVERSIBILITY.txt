@@ -6,7 +6,7 @@ the baseline creates no schema objects, so `covered` is 0 and there is nothing t
 
     docker compose up -d --wait
     cd api && uv run pytest tests/test_reversibility.py
-    -> 7 passed, 1 xfailed
+    -> 8 passed, 1 xfailed        (verified by running it, not inferred)
 
 The xfail is the honest result. It is `strict=True, raises=AssertionError` — strict so the
 day S-010 adds a table it fails and the marker must be deleted; `raises` because otherwise
@@ -14,15 +14,30 @@ pytest turns a fixture exception into XFAIL and a harness that computed nothing 
 same line.
 
 Failability: `test_an_irreversible_migration_is_reported` injects a migration that creates a
-table and drops nothing, and fails if the round trip calls it reversible.
+table and drops nothing, and fails if the round trip calls it reversible. It also asserts
+`covered >= 1`, which is what makes the other two assertions mean anything — both are
+satisfied by alembic's DuplicateTableError text alone, so without it `snapshot()` could
+return nothing and the suite stayed byte-identical to healthy (8 passed, 1 xfailed). Found by
+review at `3bfb297`; the line had existed before the trim and was deleted with the machinery
+around it. Both mutations — gutting `snapshot()` and emptying `_QUERIES` — now go red.
 
-Where no database is reachable (CI before 41b1e85, any fresh clone) these tests skip with a
-reason naming what is unproven. `-ra` is in pytest's addopts so the skip prints; under `-q` a
-skip is a dot and a run that proved nothing looks like one that proved everything. CI now
-provisions the database, so they run: run 30493278207, `42 passed, 1 xfailed`, zero skips.
+Where no database is reachable (any fresh clone) these tests skip with a reason naming what is
+unproven. `-ra` is in pytest's addopts so the skip prints; under `-q` a skip is a dot and a run
+that proved nothing looks like one that proved everything. CI provisions the database as of
+`41b1e85`, so they run there — run 30493278207 reported `42 passed, 1 xfailed` with zero skips,
+which was the whole suite **at that commit**, not this file's tests and not the current count.
 
-TRIMMED 2026-07-29. This file was 193 lines and the harness 1,429; they are now 25 and 599.
-The removed machinery — a 22-case mutation matrix over the harness, chain stepping for a
+`same_database` guards against driving the application database to `base`: it compares host,
+port and database name with loopback spellings folded together, and fails the run rather than
+skipping. `Settings` is not that guard — it compares two strings and is inert when
+PREEMPT_DATABASE_URL is unset. Deleted by the trim as bloat, restored after review; it guards
+live code. Verified: `localhost` against `127.0.0.1` on the same database fails the run, and
+the dev database still holds only `alembic_version`.
+
+TRIMMED 2026-07-29. This file was 193 lines and the two reversibility files 1,429; they are
+now 32 and 484. (The gate's ratio counts all of `api/tests` — 636 lines against 300 of
+application, 2.12:1 — so do not compare 1,429 to that number; the review caught exactly that
+mix-up here.) The removed machinery — a 22-case mutation matrix over the harness, chain stepping for a
 chain of one, seven speculative object classes — verified the harness rather than the
 application, against a migration that does nothing. Ledger R9/R10, Preempt D-016. It is all
 in git at `22d656b`; restore what S-010 needs when S-010 exists.
@@ -30,3 +45,9 @@ in git at `22d656b`; restore what S-010 needs when S-010 exists.
 Known gaps, not a bound: row data, grants, ownership, triggers, policies, types, routines,
 view and sequence internals, TimescaleDB objects, branched histories. A downgrade that
 destroys a table's contents while restoring its shape reads as reversible.
+
+Two guards are themselves unpinned, stated rather than left to be found: the NULL-definition
+raise in `_read_snapshot`, and the four object classes' *depth* — the definitions are compared,
+but nothing proves a view body or sequence parameter change would be caught, because those
+classes are no longer queried. Pinning either needs a fixture that creates the objects, which
+is what the trim removed. Revisit at S-010, when real tables make it load-bearing.

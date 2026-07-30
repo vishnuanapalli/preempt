@@ -27,6 +27,7 @@ from pathlib import Path
 
 from alembic.config import Config
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import command
@@ -166,6 +167,26 @@ def reachable(url: str) -> str | None:
     return None
 
 
+#: Spellings of "this machine". Two URLs naming different ones point at the same server.
+_LOOPBACK = {"", "localhost", "127.0.0.1", "::1"}
+
+
+def same_database(a: str, b: str) -> bool:
+    """True when two URLs name the same host, port and database.
+
+    Restored 2026-07-29 after the trim deleted it as bloat. It is not bloat: it guards live
+    code. `Settings` compares two strings, so it passes for `localhost` against `127.0.0.1`
+    or a differing query string, and it does not run at all when PREEMPT_DATABASE_URL is
+    unset. Everything here drives a database to `base`; against the application database
+    that destroys it. Credentials are ignored — two roles on one database are one database.
+    """
+    left, right = make_url(a), make_url(b)
+    host_l, host_r = (left.host or "").lower(), (right.host or "").lower()
+    if host_l != host_r and not (host_l in _LOOPBACK and host_r in _LOOPBACK):
+        return False
+    return (left.port or 5432) == (right.port or 5432) and left.database == right.database
+
+
 def alembic_config(version_locations: list[Path] | None = None) -> Config:
     """Alembic pointed at the test database. `-x db=test` is what env.py reads."""
     cfg = Config(str(ALEMBIC_INI), cmd_opts=Namespace(x=["db=test"]))
@@ -194,6 +215,7 @@ class RoundTrip:
     head: Snapshot
     after_reverse: Snapshot
     after_reapply: Snapshot
+    forward_error: str | None = None
     reverse_error: str | None = None
     reapply_error: str | None = None
 
@@ -205,6 +227,8 @@ class RoundTrip:
 
     @property
     def differences(self) -> list[str]:
+        if self.forward_error is not None:
+            return [f"upgrading to head failed: {self.forward_error}"]
         if self.reverse_error is not None:
             return [f"downgrading to base failed: {self.reverse_error}"]
         out = diff(self.base, self.after_reverse)
@@ -226,7 +250,7 @@ def run_round_trip(url: str, cfg: Config) -> RoundTrip:
     """
     command.downgrade(cfg, "base")
     base = snapshot(url)
-    command.upgrade(cfg, "head")
+    forward_error = _attempt(lambda: command.upgrade(cfg, "head"))
     head = snapshot(url)
     reverse_error = _attempt(lambda: command.downgrade(cfg, "base"))
     after_reverse = snapshot(url)
@@ -237,6 +261,7 @@ def run_round_trip(url: str, cfg: Config) -> RoundTrip:
         head=head,
         after_reverse=after_reverse,
         after_reapply=after_reapply,
+        forward_error=forward_error,
         reverse_error=reverse_error,
         reapply_error=reapply_error,
     )

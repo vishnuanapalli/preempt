@@ -84,42 +84,30 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       now filter. 36 cases, both directions; sabotages caught include reverting each of the
       last three rounds' regressions.
 
-- [ ] **2. S-002's reversibility is vacuous.** Built 2026-07-29, D-015. **Unticked, and the
-      only thing outstanding is the re-review.** Round one returned BLOCK — 5 BLOCK, 5 MAJOR,
-      8 MINOR, every finding correct — and all of them are fixed at `2bf1c96`. The re-review
-      has been attempted **five** times and died each time to `API Error: 529 Overloaded`,
-      server-side and unrelated to this repo. The fifth attempt ran on Sonnet rather than
-      Opus to rule out model-specific capacity; it failed the same way, so the fault is the
-      subagent path or general API load, not the model routing in CLAUDE.md. Nothing in the work is known to be
-      wrong; nothing has cleared it either. **Resume by running `work-breaker` on model opus
-      against HEAD** — the brief is in the loop's history, and the fixes it needs to check are
-      listed below. Do not tick this box on the strength of a green gate: the gate was green
-      for the version that then collected ten findings.
-      While the reviewer was unavailable, the one gap it had flagged as unreachable was
-      closed with evidence instead of reasoning: chain stepping. With a single migration
-      every branch that visits the next revision, stops at a failure, names the culprit or
-      reports the rest unstepped was dead code under test — removing the `break` left the
-      suite green. Two tests now build a real three-migration chain in a temporary version
-      location, and mutation cases 6–8 cover it.
-      Built as scoped: a reversibility harness rather than a baseline with invented schema.
-      `api/tests/reversibility.py` snapshots eleven classes of schema object and steps each
-      migration — apply, reverse, re-apply — before exercising the whole chain;
-      `api/tests/test_reversibility.py` runs it on every gate invocation with three
-      deliberately irreversible migrations, one per failure path;
-      `scripts/sabotage-reversibility.sh` breaks the harness twenty-two ways by hand and
-      requires each to go red *by node id*. Evidence: `audit/REVERSIBILITY.txt`.
-      **Coverage is zero and the harness says so.** The baseline creates nothing, so the
-      round trip has nothing to reverse. The strict xfail on
-      `test_the_round_trip_covers_at_least_one_schema_object` fails the day S-010 lands,
-      which is the day to delete it — that is now a criterion on S-010.
-      **The first version was believed done twice.** The mutation matrix's first run found
-      three unpinned mechanisms; the review that followed found five more, including a
-      one-line off switch in `reachable()` that removed every database-backed test while
-      the gate reported PASS. Both rounds are in `audit/REVERSIBILITY.txt` §4 and
-      `docs/10-FRICTION.md`. Also fixed along the way: the test database on 5434 had no
-      preflight probe (`docker:postgres-test` now), and `S-006` — a story that has never
-      existed — was cited in six files as the trigger for the harness becoming load-bearing.
-      The schema story is **S-010**.
+- [ ] **2. S-002's reversibility is vacuous.** Built, trimmed, reviewed twice. **Unticked:
+      round two returned BLOCK and its findings are fixed but not re-reviewed.**
+      **What exists now** (rewritten 2026-07-29 — this box described machinery deleted at
+      `3bfb297` for several hours, which is the drift the trim was supposed to remove):
+      `api/tests/reversibility.py` (267 lines) snapshots four object classes — relations,
+      columns, indexes, constraints — and runs a whole-chain round trip: base → head → base →
+      head, comparing schemas at each stop. `api/tests/test_reversibility.py` (217) has six
+      tests needing no database and three against the real one. Ratio 2.12:1, enforced by
+      `scripts/check-proportion.py` in gate section 4.
+      **Deleted at `3bfb297`, recoverable at `22d656b`:** the 22-case mutation matrix, chain
+      stepping, seven object classes, two of three sabotage shapes, the class-coverage test.
+      Ledger R9/R10 and D-016 — verification is capped by the code it covers.
+      **Round two's BLOCK was right on all six findings, and two were caused by the trim:**
+      the surviving sabotage test passed with **zero schema objects compared** (both its
+      assertions were satisfied by alembic's error text, so `snapshot()` could return nothing
+      and the suite stayed byte-identical) and the `same_database` guard was deleted as bloat
+      while it guarded live code — `downgrade base` against the application database. Both
+      fixed and both verified by mutation: gutting `snapshot()` and emptying `_QUERIES` now
+      go red, and `localhost` against `127.0.0.1` fails the run rather than skipping.
+      Also fixed: the forward `upgrade` was unwrapped, and the ratio ceiling was set *at* the
+      achieved value (1.9967 against 2.0), which made it a ratchet that blocked its own fixes
+      — see D-018.
+      **Still unpinned, stated not hidden:** the NULL-definition raise, and the *depth* of the
+      four remaining classes. Revisit at S-010.
 - [x] **3. S-001 had no evidence artifact, and its deliverable refused to hold one.** Closed
       2026-07-29. **The red run is real:** lint broken on a throwaway branch, run
       `30493554151` → `E401`/`F401` → `FAIL ruff`, `FAIL format`, `VERIFY: FAIL`, workflow
