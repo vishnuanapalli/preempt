@@ -38,12 +38,27 @@ curl -fsS https://<host>/api/v1/health
 
 ## Rebuild the demo dataset
 
-<!-- Production data is synthetic by design, so the seed script IS the backup strategy.
-     This is the recovery path for a bad migration, and the only one. -->
+The seed script is the backup strategy. There is no other recovery path, and there does not
+need to be: nothing here is data a user gave us.
 
 ```bash
-# the literal command
+cd api && uv run alembic upgrade head        # schema first
+cd api && uv run python ../scripts/seed.py   # then the catalog
 ```
+
+Safe to run twice. Idempotent by construction — `ON CONFLICT DO NOTHING` on the natural key,
+so there is no window between a check and an insert for a second run to slip through.
+
+**Seed the catalog before ingestion, not after.** The writer refuses to invent `vcpu` and
+`memory_mb` for an instance type it has not seen (D-019), so a tick against an unseeded catalog
+stores nothing and reports every observation as `unknown_instance_type`. That count is the
+symptom to look for: a real run against a seeded catalog reports most observations unknown only
+because the curated set is a deliberate subset — measured live, 3,194 fetched, 24 stored, 3,170
+unknown, which is the intended shape and not a fault.
+
+What the seed does **not** restore: `price_metric` history. Those rows come from ingestion
+ticks and are gone for good. Losing them costs the demo its history until enough ticks have run
+again, which is the honest limit of this recovery path rather than a gap to paper over.
 
 ## Environment variables
 

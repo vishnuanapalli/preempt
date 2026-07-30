@@ -112,9 +112,19 @@ design, which is the "do not invent state to satisfy acceptance criteria" rule i
 `CLAUDE.md`. It moves to Sprint 1 alongside the schema it seeds, and Sprint 0 closes
 without it.
 
-- [ ] `scripts/seed.py` runs against an empty database without error
-- [ ] Documented in the runbook stub as the recovery path
-- [ ] Idempotent: running twice leaves the same state
+- [x] `scripts/seed.py` runs against an empty database without error — seeded the test
+      database for real: `20 inserted, 0 already present, 0 underivable`, across three providers
+- [x] Documented in `docs/07-RUNBOOK.md` as the recovery path, including what it does **not**
+      restore: `price_metric` history comes from ingestion ticks and is gone for good
+- [x] Idempotent: running twice leaves the same state. By construction rather than by checking
+      first — `ON CONFLICT DO NOTHING` on the natural key has no read-then-write window. Pinned
+      by `test_seeding_twice_leaves_the_same_rows` against the real database
+- [x] **Specs are derived, and every row says so.** Azure's price feed carries no hardware
+      description (D-019), so `app/ingest/catalog.py` derives vCPU and memory from the
+      documented size naming convention and **refuses** what the convention cannot express —
+      GPU and high-memory families return `None` rather than a plausible default. Written as
+      inspectable code rather than a table of asserted numbers, because a derivation can be read
+      and disagreed with; ~40 numbers typed in from memory could not be told from invented ones
 
 ---
 
