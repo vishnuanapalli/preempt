@@ -159,10 +159,22 @@ without it.
 ### S-011 — Market simulator, ported
 **MUST** · depends on S-010
 
-- [ ] Pure generator modules ported with no database imports
-- [ ] Separate named RNG streams per concern
-- [ ] Identical output across two runs with the same seed
-- [ ] Identical output across two different `PYTHONHASHSEED` values — the test that made determinism survive adversarial review before
+- [x] Pure generator modules with no database imports — `app/providers/simulated.py` imports
+      only `hashlib`, `datetime`, `decimal` and the shared observation shape
+- [x] Separate named RNG streams per concern. Price, capacity and interruption each key on
+      their own stream name, so adding a draw cannot shift an existing one — one shared
+      generator would mean a new capacity draw silently changed every price after it
+- [x] Identical output across two runs with the same seed
+- [x] Identical output across two different `PYTHONHASHSEED` values — **the test D-005 says made
+      determinism survive adversarial review.** It runs real subprocesses under `0`, `12345` and
+      `random`, because the defect it guards against lives only across a process boundary:
+      Python salts `hash()` per interpreter, so a generator seeded from it is perfectly
+      deterministic within one process and different on every run. Keys are hashed with
+      **blake2b** instead. A companion test demonstrates that `hash()` really does differ under
+      those seeds in this environment, so the guard is shown able to fail rather than assumed
+- [x] Simulated everywhere it surfaces: `source="simulated"` on every row, and types named
+      `sim.*` so a name alone gives it away even if a caller drops the field. The simulator takes
+      the catalog rather than inventing types, so no row exists that no catalog entry explains
 
 ### S-012 — Azure provider
 **MUST** · depends on S-010
