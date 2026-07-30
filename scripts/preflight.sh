@@ -134,6 +134,25 @@ else
   fail docker:postgres-test "test database reachable (5434)" "container not running — migration reversibility is unproven without it"
 fi
 
+# The one external data source. Probed because R1 says a service is named and proven before
+# code depends on it — and this probe is what found the 429: the endpoint rate-limits after a
+# second request in quick succession, which is why `api/tests/test_azure_provider.py` reads
+# recorded payloads instead of calling it. One request here, deliberately.
+az_body=$(curl -s -m 20 -G \
+  --data-urlencode "\$filter=serviceName eq 'Virtual Machines' and armRegionName eq 'eastus'" \
+  "https://prices.azure.com/api/retail/prices" 2>/dev/null)
+az_count=$(printf '%s' "$az_body" | python3 -c 'import json,sys
+try:
+    d = json.load(sys.stdin)
+    print(len(d["Items"]) if isinstance(d.get("Items"), list) else "")
+except Exception:
+    print("")' 2>/dev/null)
+if [ -n "$az_count" ] && [ "$az_count" -gt 0 ] 2>/dev/null; then
+  pass azure:retail-prices "azure retail prices" "$az_count items for eastus, unauthenticated"
+else
+  fail azure:retail-prices "azure retail prices" "no Items array — rate limited (429) or shape changed"
+fi
+
 # ------------------------------------------------------------------ 3. source host
 echo
 echo "3. Source host"

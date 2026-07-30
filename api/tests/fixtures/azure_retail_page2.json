@@ -1,0 +1,53 @@
+{
+  "BillingCurrency": "USD",
+  "CustomerEntityId": "Default",
+  "CustomerEntityType": "Retail",
+  "Items": [
+    {
+      "currencyCode": "USD",
+      "tierMinimumUnits": 0.0,
+      "retailPrice": 0.0688,
+      "unitPrice": 0.0688,
+      "armRegionName": "eastus",
+      "location": "US East",
+      "effectiveStartDate": "2023-07-01T00:00:00Z",
+      "meterId": "000c494f-505a-508d-84e3-6c512039061f",
+      "meterName": "DC8as v5 Low Priority",
+      "productId": "DZH318Z09B6C",
+      "skuId": "DZH318Z09B6C/000H",
+      "productName": "DCasv5-series Linux",
+      "skuName": "Standard_DC8as_v5 Low Priority",
+      "serviceName": "Virtual Machines",
+      "serviceId": "DZH313Z7MMC8",
+      "serviceFamily": "Compute",
+      "unitOfMeasure": "1 Hour",
+      "type": "Consumption",
+      "isPrimaryMeterRegion": true,
+      "armSkuName": "Standard_DC8as_v5"
+    },
+    {
+      "currencyCode": "USD",
+      "tierMinimumUnits": 0.0,
+      "retailPrice": 4.679,
+      "unitPrice": 4.679,
+      "armRegionName": "eastus",
+      "location": "US East",
+      "effectiveStartDate": "2024-08-01T00:00:00Z",
+      "meterId": "00114c3c-893a-5141-8cf2-7582013ce76f",
+      "meterName": "FX64mds v2 Low Priority",
+      "productId": "DZH318Z0H7DN",
+      "skuId": "DZH318Z0H7DN/00B7",
+      "productName": "Virtual Machines FXmdsv2 Series Windows",
+      "skuName": "FX64mds v2 Low Priority",
+      "serviceName": "Virtual Machines",
+      "serviceId": "DZH313Z7MMC8",
+      "serviceFamily": "Compute",
+      "unitOfMeasure": "1 Hour",
+      "type": "Consumption",
+      "isPrimaryMeterRegion": true,
+      "armSkuName": "Standard_FX64mds_v2"
+    }
+  ],
+  "NextPageLink": null,
+  "Count": 2
+}

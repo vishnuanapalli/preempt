@@ -152,12 +152,26 @@ without it.
 ### S-012 — Azure provider
 **MUST** · depends on S-010
 
-- [ ] Fetches from the public endpoint with no credentials
-- [ ] Follows pagination to completion
-- [ ] Extracts only spot meters
-- [ ] Normalises into the shared observation shape
-- [ ] Returns a typed error, not a partial result, on an unexpected response shape
-- [ ] Unit tests run against a recorded payload, never the live API
+- [x] Fetches from the public endpoint with no credentials — `azure:retail-prices` in
+      `preflight.sh` records `1000 items for eastus, unauthenticated`
+- [x] Follows pagination to completion. `$top` is **ignored** by the endpoint (a request for 5
+      returned 1000), so `NextPageLink` is the only page control; a two-page fixture pins it,
+      and a link that loops raises rather than returning what it had
+- [x] Extracts only spot meters — client-side on `skuName`, because OData `contains()` could
+      not be verified: the request testing it is the one that hit 429. Building on an
+      unverified filter is how a provider silently returns nothing
+- [x] Normalises into the shared observation shape (`app/providers/base.py`), with `source`
+      non-optional. Two approximations recorded rather than hidden: the retail API prices a
+      region not a zone (`REGION_WIDE`), and OS is inferred from a display string, so RHEL and
+      SUSE will read as `linux`
+- [x] Returns a typed error, not a partial result. `ProviderUnavailable` for 429 and transport
+      failures (retryable), `UnexpectedResponse` for a shape it cannot honestly interpret. A
+      missing price raises rather than defaulting to zero, which would read as a free machine
+      and win every comparison
+- [x] Unit tests run against a recorded payload, never the live API — 15 tests in 0.05s.
+      **Not a preference:** the endpoint returned HTTP 429 on a second request seconds after
+      the first, and preflight reproduced that while this was being built. Fixtures are real
+      response bytes, trimmed to six items, never invented
 
 ### S-013 — Store-on-change writer
 **MUST** · depends on S-011, S-012
