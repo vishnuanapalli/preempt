@@ -1,56 +1,89 @@
-Migration reversibility — 2026-07-29
+Migration reversibility — 2026-07-30
 ====================================
 
-The harness is proven able to fail. It is NOT evidence the migrations are reversible:
-the baseline creates no schema objects, so `covered` is 0 and there is nothing to reverse.
+WHAT THIS IS: the record of *how* migration reversibility is established here, and what it
+does not establish. **It deliberately contains no test counts, line counts or ratios.** Three
+consecutive review rounds found a wrong number in this file, and each correction was stale
+before the commit landed — including one that said "verified by running it, not inferred"
+next to a figure that was neither. A snapshot artifact holding live values is the rot the
+2026-07-28 friction entry ruled against, and correcting the numbers a fourth time would have
+been treating the symptom.
+
+For current numbers, run the commands. They are the source; this file is the reasoning.
 
     docker compose up -d --wait
     cd api && uv run pytest tests/test_reversibility.py
-    -> 8 passed, 1 xfailed        (verified by running it, not inferred)
+    ./scripts/verify.sh                    # section 4 prints the verification/application ratio
 
-The xfail is the honest result. It is `strict=True, raises=AssertionError` — strict so the
-day S-010 adds a table it fails and the marker must be deleted; `raises` because otherwise
-pytest turns a fixture exception into XFAIL and a harness that computed nothing emits the
-same line.
 
-Failability: `test_an_irreversible_migration_is_reported` injects a migration that creates a
-table and drops nothing, and fails if the round trip calls it reversible. It also asserts
-`covered >= 1`, which is what makes the other two assertions mean anything — both are
-satisfied by alembic's DuplicateTableError text alone, so without it `snapshot()` could
-return nothing and the suite stayed byte-identical to healthy (8 passed, 1 xfailed). Found by
-review at `3bfb297`; the line had existed before the trim and was deleted with the machinery
-around it. Both mutations — gutting `snapshot()` and emptying `_QUERIES` — now go red.
+The problem this replaced
+-------------------------
 
-Where no database is reachable (any fresh clone) these tests skip with a reason naming what is
-unproven. `-ra` is in pytest's addopts so the skip prints; under `-q` a skip is a dot and a run
-that proved nothing looks like one that proved everything. CI provisions the database as of
-`41b1e85`, so they run there — run 30493278207 reported `42 passed, 1 xfailed` with zero skips,
-which was the whole suite **at that commit**, not this file's tests and not the current count.
+S-002 asked for `alembic downgrade base` then `upgrade head` to succeed. That exits 0 against
+a migration whose `upgrade()` and `downgrade()` are both `pass` — which is what the baseline
+was — and it was reported as demo evidence. The useful question is never "did the command
+succeed" but "would this notice if the thing it checks were untrue".
 
-`same_database` guards against driving the application database to `base`: it compares host,
-port and database name with loopback spellings folded together, and fails the run rather than
-skipping. `Settings` is not that guard — it compares two strings and is inert when
-PREEMPT_DATABASE_URL is unset. Deleted by the trim as bloat, restored after review; it guards
-live code. Verified: `localhost` against `127.0.0.1` on the same database fails the run, and
-the dev database still holds only `alembic_version`.
 
-TRIMMED 2026-07-29. This file was 193 lines and the two reversibility files 1,429; they are
-now 53 and 484 (32 was this file's size at `3bfb297` — the number being corrected, copied into its own correction). (The gate's ratio counts all of `api/tests` — 636 lines against 300 of
-application, 2.12:1 — so do not compare 1,429 to that number; the review caught exactly that
-mix-up here.) The removed machinery — a 22-case mutation matrix over the harness, chain stepping for a
-chain of one, seven speculative object classes — verified the harness rather than the
-application, against a migration that does nothing. Ledger R9/R10, Preempt D-016. It is all
-in git at `22d656b`; restore what S-010 needs when S-010 exists.
+How it is established
+---------------------
 
-Known gaps, not a bound: row data, grants, ownership, triggers, policies, types, routines,
-view and sequence internals, TimescaleDB objects, branched histories. A downgrade that
-destroys a table's contents while restoring its shape reads as reversible.
+The schema is read from the database before and after. Reversible means reversing leaves it
+indistinguishable from before, and re-applying produces what it produced the first time. Four
+object classes — relations, columns, indexes, constraints — because those are what a migration
+creates. `alembic_version` and extension-owned objects are excluded for correctness: the first
+survives `downgrade base`, and the local image ships timescaledb.
 
-One guard is still unpinned, stated rather than left to be found: the NULL-definition raise in
-`_read_snapshot`. Nothing exercises it.
+Failability is tested, not asserted. Two deliberately broken migrations run on every gate
+invocation: one that drops nothing on downgrade, one that raises on upgrade. Each fix to this
+harness is verified by reverting it and requiring the suite to go red.
 
-The *depth* of the four classes is also unproven — definitions are compared, but nothing shows
-that a change within a class would be caught, because pinning that needs a fixture the trim
-removed. The class *count* is now pinned: `covered` counts rows and was satisfied by a single
-query returning enough of them, so `head_classes` checks all four are read. Real schema
-supplies all four, so no fixture was needed after all.
+**Two pins exist because a floor alone is satisfiable by a constant.** `covered` is bounded
+below by twice the model table count *and* above by an exact-equality assertion on a
+hand-built snapshot; `head_classes` is bounded the same way. Both counterweights were added
+after review found that a constant satisfied the one-sided version — twice, in the same file,
+by the same mechanism.
+
+Since S-010 this covers real schema. Before it, `covered` was 0 and a strict xfail said so;
+that marker failed the day the tables landed, which is what it was for, and it is gone.
+
+
+What it does not establish
+--------------------------
+
+- **The depth of the four classes.** Definitions are compared, but nothing proves a change
+  *within* a class would be caught; that needs a fixture the 2026-07-29 trim removed.
+- **The NULL-definition guard in `_read_snapshot`.** Nothing exercises it.
+- **Row data, grants, ownership, comments, triggers, policies, types, routines, view and
+  sequence internals, TimescaleDB-specific objects, branched histories.** A downgrade that
+  destroys a table's contents while restoring its shape reads as reversible here.
+- **Anything about Neon.** The round trip runs against the local container on 5434 only.
+- **That it cannot run against the application database — only that it refuses to.** The
+  check compares host, port and database name with loopback spellings folded together, and
+  when `PREEMPT_DATABASE_URL` is unset it requires the target to be loopback. `Settings` is a
+  weaker thing and was once cited here as if it were this one: it compares two strings, so it
+  passes for `localhost` against `127.0.0.1`, and it does not run at all when the application
+  URL is unset.
+- **Reversibility anywhere a database is absent.** These tests skip with a reason naming what
+  is unproven. CI provisions the database as of `41b1e85`, so they run there.
+
+
+Two destructive defects this harness has had, both found by review
+------------------------------------------------------------------
+
+Recorded because both were introduced by *fixing* something, which is the pattern worth
+remembering rather than the individual bugs.
+
+1. **Cleanup that stamped instead of migrated.** `command.stamp(real_head)` claims a revision
+   is applied rather than applying it. Harmless against an empty baseline; once S-010 created
+   real tables it told alembic the migration was in place while its tables were gone, and
+   every later run died on `DROP TABLE price_metric`. Replaced by a reset that drops public
+   tables, clears `alembic_version` by SQL, and upgrades for real.
+
+2. **A fixture that destroyed the target before the guard ran.** That reset was then wired in
+   as `autouse`, so it ran `DROP TABLE ... CASCADE` over every table in `public` *without*
+   passing through the database-identity guard — making it strictly more destructive than the
+   `downgrade base` the guard exists to prevent, since it drops tables no migration created.
+   Demonstrated on a throwaway database: every table gone, not one guard message printed. The
+   guard had already been fixed twice; it was bypassed by code added in the same commit as its
+   second fix. The fixture is now requested explicitly and goes through the guard first.

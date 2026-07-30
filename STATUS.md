@@ -84,30 +84,29 @@ severity. Sprint 0 cannot close while any of 1–8 is open.
       now filter. 36 cases, both directions; sabotages caught include reverting each of the
       last three rounds' regressions.
 
-- [ ] **2. S-002's reversibility is vacuous.** Built, trimmed, reviewed twice. **Unticked:
-      round two returned BLOCK and its findings are fixed but not re-reviewed.**
-      **What exists now** (rewritten 2026-07-29 — this box described machinery deleted at
-      `3bfb297` for several hours, which is the drift the trim was supposed to remove):
-      `api/tests/reversibility.py` (267 lines) snapshots four object classes — relations,
-      columns, indexes, constraints — and runs a whole-chain round trip: base → head → base →
-      head, comparing schemas at each stop. `api/tests/test_reversibility.py` (217) has six
-      tests needing no database and three against the real one. Ratio 2.12:1, enforced by
-      `scripts/check-proportion.py` in gate section 4.
-      **Deleted at `3bfb297`, recoverable at `22d656b`:** the 22-case mutation matrix, chain
-      stepping, seven object classes, two of three sabotage shapes, the class-coverage test.
-      Ledger R9/R10 and D-016 — verification is capped by the code it covers.
-      **Round two's BLOCK was right on all six findings, and two were caused by the trim:**
-      the surviving sabotage test passed with **zero schema objects compared** (both its
-      assertions were satisfied by alembic's error text, so `snapshot()` could return nothing
-      and the suite stayed byte-identical) and the `same_database` guard was deleted as bloat
-      while it guarded live code — `downgrade base` against the application database. Both
-      fixed and both verified by mutation: gutting `snapshot()` and emptying `_QUERIES` now
-      go red, and `localhost` against `127.0.0.1` fails the run rather than skipping.
-      Also fixed: the forward `upgrade` was unwrapped, and the ratio ceiling was set *at* the
-      achieved value (1.9967 against 2.0), which made it a ratchet that blocked its own fixes
-      — see D-018.
-      **Still unpinned, stated not hidden:** the NULL-definition raise, and the *depth* of the
-      four remaining classes. Revisit at S-010.
+- [ ] **2. S-002's reversibility is vacuous.** Built, trimmed, and reviewed four times —
+      every round BLOCK, every finding correct. **Unticked: round four's findings are fixed but
+      not re-reviewed.**
+      **No counts in this box, on purpose.** Earlier versions restated file sizes, test counts
+      and the ratio, and went stale within two commits every time — three consecutive review
+      rounds found a wrong number in this item or in `audit/REVERSIBILITY.txt`. Run
+      `./scripts/verify.sh` and `cd api && uv run pytest tests/test_reversibility.py`; the gate
+      prints the ratio. `audit/REVERSIBILITY.txt` holds the reasoning and what it does not
+      establish, and now deliberately holds no live values either.
+      **What exists:** a whole-chain round trip against the test database on 5434, comparing
+      four object classes before and after, plus two deliberately broken migrations (one drops
+      nothing on downgrade, one raises on upgrade) that it must report. Since S-010 it covers
+      real schema.
+      **The pattern across four rounds, which is the useful part:** every round found a pin
+      that a constant satisfied, and every one was introduced by *fixing* something else. The
+      one-sided floor on `covered`; then the same shape on `head_classes`; then a cleanup that
+      stamped a revision instead of applying it; then an `autouse` fixture that ran
+      `DROP TABLE ... CASCADE` before the database-identity guard could run — bypassing, with
+      code added in the same commit, a guard that had already been fixed twice. Each is now
+      pinned by reverting the fix and requiring red.
+      **Still open, recorded not hidden:** `check-proportion.py` has no test of its own, the
+      NULL-definition guard is unexercised, and the depth of the four object classes is
+      unproven.
 - [x] **3. S-001 had no evidence artifact, and its deliverable refused to hold one.** Closed
       2026-07-29. **The red run is real:** lint broken on a throwaway branch, run
       `30493554151` → `E401`/`F401` → `FAIL ruff`, `FAIL format`, `VERIFY: FAIL`, workflow

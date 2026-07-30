@@ -5,8 +5,9 @@ exits 0 against a migration whose `upgrade()` and `downgrade()` are both `pass`,
 exactly what this project's baseline is, and it was reported as demo evidence. So the useful
 question is not "are the migrations reversible" but "would this notice if they were not".
 
-Six tests need no database. Three run against the real test database: the round trip, its
-coverage, and one deliberately irreversible migration that must be reported as such — a
+Most tests here need no database — the differ, the URL comparison and the verdict logic are
+all exercised in memory. The rest run against the real test database: the round trip, its
+coverage, and two deliberately broken migrations that must be reported as such — a
 check nobody has watched fail is indistinguishable from one that cannot.
 
 As of S-010 this covers real schema: two relational tables and three hypertables. Until
@@ -85,6 +86,11 @@ def test_a_round_trip_that_did_not_restore_the_schema_is_not_reversible() -> Non
     assert not rt.reversible
     assert rt.differences == ["added relation public.pool: kind=r"]
     assert rt.covered == 1
+    # The counterweight for `head_classes`, in the same place and the same shape as the one
+    # for `covered`. Without it, `head_classes` could return the full four-class set as a
+    # constant and dropping the index and constraint queries went unnoticed — the exact hole
+    # it was added to close, reachable again by editing one line.
+    assert rt.head_classes == {"relation"}
 
 
 def test_a_failed_re_application_is_not_reversible() -> None:
@@ -231,9 +237,20 @@ def _execute(url: str, statement: str) -> None:
     asyncio.run(_run())
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _consistent_database() -> None:
+@pytest.fixture(scope="module")
+def consistent_database() -> str:
     """Establish a real head before any round trip, rather than assuming one.
+
+    **Requested explicitly, never autouse, and it goes through `_skip_unless_database`
+    first.** Both of those were defects when this was written. As `autouse` it ran for all
+    fourteen tests in the file, so the ten that need no database began depending on database
+    state. And it called `_reset_to_head` — `DROP TABLE ... CASCADE` over every table in
+    `public` — *without* the guard that checks the target is not the application database.
+    That made it strictly more destructive than the `downgrade base` the guard exists to
+    prevent, because it drops tables no migration created, and it bypassed a guard that had
+    already been fixed twice, using code added in the same commit. Demonstrated on a
+    throwaway database: every table gone, and not one guard message printed, because the
+    fixture raised before the guard could speak.
 
     An interrupted run leaves `alembic_version` naming a revision whose tables are gone. The
     round trip opens with an unwrapped `downgrade base`, so every later run then died on
@@ -244,13 +261,13 @@ def _consistent_database() -> None:
     Cheap because the test database is tmpfs-backed and ephemeral by design. A test that
     assumes its preconditions is a test that fails for reasons unrelated to what it checks.
     """
-    if not settings.test_database_url or reachable(settings.test_database_url) is not None:
-        return
-    _reset_to_head(settings.test_database_url)
+    url = _skip_unless_database()
+    _reset_to_head(url)
+    return url
 
 
 @pytest.mark.integration
-def test_every_migration_reverses_against_the_real_database() -> None:
+def test_every_migration_reverses_against_the_real_database(consistent_database: str) -> None:
     url = _skip_unless_database()
     result = run_round_trip(url, alembic_config())
     assert result.reversible, "\n  ".join(
@@ -259,7 +276,7 @@ def test_every_migration_reverses_against_the_real_database() -> None:
 
 
 @pytest.mark.integration
-def test_the_round_trip_covers_at_least_one_schema_object() -> None:
+def test_the_round_trip_covers_at_least_one_schema_object(consistent_database: str) -> None:
     """Was a strict xfail until S-010. The baseline created nothing, so the round trip proved
     nothing, and the marker failed the day real tables landed — which is what it was for.
 
@@ -328,7 +345,9 @@ def _reset_to_head(url: str) -> None:
 
 
 @pytest.mark.integration
-def test_a_migration_that_will_not_apply_is_reported(tmp_path: Path) -> None:
+def test_a_migration_that_will_not_apply_is_reported(
+    tmp_path: Path, consistent_database: str
+) -> None:
     """The forward `upgrade` must be a reported result, not an escaping exception.
 
     `_attempt`'s own comment says a failing migration is "a result to report, not a crash to
@@ -354,7 +373,7 @@ def test_a_migration_that_will_not_apply_is_reported(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_an_irreversible_migration_is_reported(tmp_path: Path) -> None:
+def test_an_irreversible_migration_is_reported(tmp_path: Path, consistent_database: str) -> None:
     """The failability proof. Without it, every assertion above is satisfied by a harness
     that returns "no differences" unconditionally — the defect this module replaces."""
     url = _skip_unless_database()

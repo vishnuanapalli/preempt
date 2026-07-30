@@ -50,8 +50,12 @@ never-ship list.
       shapes and a twenty-two-case mutation matrix for several hours after all three were
       deleted at `3bfb297` (D-016, ledger R9/R10). STATUS and the audit file were corrected in
       the same pass and this was missed — the one document of the three that asserts *done*.
-      **It covers real schema as of S-010:** `covered` is bounded below by twice the model
-      table count and every object class is checked, so a constant cannot satisfy it.
+      **It covers real schema as of S-010.** `covered` and `head_classes` are each bounded
+      from *both* sides — a floor derived from the model table count, and an exact-equality
+      assertion on a hand-built snapshot — because a one-sided bound is satisfied by a
+      constant. Review found exactly that, twice: first on `covered`, then on `head_classes`
+      after it was added to close the first. Both counterweights are verified by reverting
+      them and requiring the suite to go red.
       The criterion this replaces — "`alembic downgrade base` then `upgrade head` succeeds
       against a real database" — was satisfied by a migration whose `upgrade()` and
       `downgrade()` are both `pass`, and was reported as evidence in the Sprint 0 demo.
@@ -130,7 +134,8 @@ without it.
       already serves it; that is how this defect arrives
 - [x] `api/tests/test_reversibility.py` reports non-zero coverage and passes. **The strict
       xfail fired as designed** — it failed the moment real tables landed, which was the
-      signal to delete it, and it is gone. 22 passed, zero xfailed
+      signal to delete it, and it is gone. Counts deliberately not pasted here; they were
+      stale within two commits every previous time
 - [x] The harness's TimescaleDB blind spot is settled: chunks are **not** extension-owned
       (no `pg_depend` row with `deptype = 'e'`) and `_timescaledb_internal` is not caught by
       the `pg_%` filter, so the harness *does* see chunks — a downgrade orphaning one would be
