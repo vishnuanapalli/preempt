@@ -903,3 +903,45 @@ you are reading this because the number is inconvenient, you are doing the secon
 **What it does not change.** D-016's rules stand, and the resolutions the script names —
 delete verification for code that does not exist, or defer the criterion — remain the first
 things to try. The ratio is still enforced on every gate run.
+
+## D-019 — The catalog is seeded, not inferred; and concurrent writers retry rather than assume
+
+- **Date:** 2026-07-30
+- **Status:** Accepted
+- **Required by** DoD 5: an interpretation call made during implementation is a decision.
+  Two came out of S-013, and both are constraints reality imposed rather than choices.
+
+**The catalog cannot be built from a price feed.** `instance_catalog` requires `vcpu` and
+`memory_mb`. Azure's Retail Prices API returns neither — it prices SKUs, it does not describe
+them; hardware specs live behind the authenticated Resource SKUs API. So the writer has three
+options for an observation whose `(provider, instance_type)` it has never seen: invent the
+specs, make the columns nullable, or refuse.
+
+It refuses, and counts. `WriteResult.unknown_instance_type` is that count. Inventing specs
+would put fabricated hardware behind a real price, which is the exact shape `CLAUDE.md`
+forbids — do not invent state an acceptance criterion assumes. Making the columns nullable
+would push the problem into every query that compares machines by size.
+
+The consequence is a real dependency, stated rather than deferred: **prices for an
+un-catalogued instance type are dropped until the catalog is seeded.** That seeding is S-005,
+already deferred into Sprint 1, and it now has a second reason to exist. Until then a
+production tick would count nearly everything as unknown, which the count makes visible
+instead of silent.
+
+**Concurrent writers deadlock, and the fix is a retry.** The concurrency test S-013 requires
+found a real `DeadlockDetectedError` with three writers on one new pool. The cycle: the pool
+upsert holds a row lock while the first insert into a hypertable takes a table-level
+`ShareRowExclusiveLock` to create its chunk, so two transactions can each hold what the other
+needs. Postgres kills one participant.
+
+Each observation is therefore written inside a `SAVEPOINT` and retried up to three times on
+SQLSTATE `40P01` or `40001`. That is sound *because* the writes are idempotent —
+`ON CONFLICT DO NOTHING` on the price and `DO UPDATE` on the pool — so a retry either finds
+the row committed and reports `unchanged`, or writes it. Retrying a non-idempotent write would
+be a different and much worse decision.
+
+**Not done, and not pretended:** the deadlock is nondeterministic, so the retry path is
+exercised opportunistically rather than on demand. The test proves no writer raises and
+exactly one row is written; it does not prove the retry branch ran on any given execution.
+Forcing a deadlock deterministically needs advisory locks in the test, which is more
+machinery than the guarantee is worth today (R9).

@@ -176,11 +176,27 @@ without it.
 ### S-013 — Store-on-change writer
 **MUST** · depends on S-011, S-012
 
-- [ ] Writes a row only when the price differs from the last recorded for that pool
-- [ ] Unchanged observation updates `pool.last_seen` and writes no history row
-- [ ] Idempotent upsert; re-running a tick creates no duplicates
-- [ ] A concurrency test with parallel writers produces no lost update
-- [ ] Reported counts are derived from the database result, and a test proves the count can differ from the input length — never-ship #5
+- [x] Writes a row only when the price differs from the last recorded for that pool
+- [x] Unchanged observation updates `pool.last_seen` and writes no history row. `GREATEST`, so
+      a retried or delayed tick cannot drag `last_seen` backwards and make live ingestion look
+      stalled — pinned by its own test
+- [x] Idempotent upsert; re-running a tick creates no duplicates
+- [x] A concurrency test with parallel writers produces no lost update. **It found a real
+      deadlock:** the pool upsert holds a row lock while the first insert into a hypertable
+      takes a table-level lock to create its chunk, so three writers on one new pool
+      deadlocked. Each observation now writes inside a `SAVEPOINT` and retries on SQLSTATE
+      `40P01`/`40001`, which is sound because the writes are idempotent (D-019). Stated in
+      D-019 rather than hidden: the deadlock is nondeterministic, so the retry branch is
+      exercised opportunistically, not on demand
+- [x] Reported counts are derived from the database result, and a test proves the count can
+      differ from the input length — never-ship #5. `prices_written` is what
+      `INSERT ... RETURNING` produced; `test_the_written_count_differs_from_the_input_length`
+      feeds three observations and asserts one write. `WriteResult` also refuses to exist
+      unless the buckets sum to the input, so a count cannot go quietly missing
+- [ ] **Opened by this story:** prices for an un-catalogued instance type are dropped and
+      counted, because Azure's price feed carries no vcpu or memory and inventing them is
+      forbidden (D-019). The catalog must be seeded — S-005, already deferred into Sprint 1,
+      now with a second reason to exist
 
 ### S-014 — Provenance is structural
 **MUST** · depends on S-013
