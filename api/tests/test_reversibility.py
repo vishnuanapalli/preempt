@@ -9,9 +9,9 @@ Six tests need no database. Three run against the real test database: the round 
 coverage, and one deliberately irreversible migration that must be reported as such — a
 check nobody has watched fail is indistinguishable from one that cannot.
 
-Nothing here proves the migrations are reversible *yet*: the baseline creates no schema
-objects, so `covered` is 0. The strict xfail says so and fails the day S-010 adds a table,
-which is the day to delete it.
+As of S-010 this covers real schema: two relational tables and three hypertables. Until
+then `covered` was 0 and a strict xfail said so; it failed the day the tables landed, which
+is what it was for, and it is gone.
 
 Trimmed from 762 lines on 2026-07-29 (ledger R9/R10). What went: a 22-case mutation matrix
 over the harness, chain-stepping tests for a chain of one, seven speculative object classes,
@@ -156,6 +156,24 @@ def _execute(url: str, statement: str) -> None:
     asyncio.run(_run())
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _consistent_database() -> None:
+    """Establish a real head before any round trip, rather than assuming one.
+
+    An interrupted run leaves `alembic_version` naming a revision whose tables are gone. The
+    round trip opens with an unwrapped `downgrade base`, so every later run then died on
+    `DROP TABLE price_metric` — "table does not exist" — which says nothing about the actual
+    problem. Reproduced by hand: drop the five tables, leave the version row, and the suite
+    wedges until someone clears it.
+
+    Cheap because the test database is tmpfs-backed and ephemeral by design. A test that
+    assumes its preconditions is a test that fails for reasons unrelated to what it checks.
+    """
+    if not settings.test_database_url or reachable(settings.test_database_url) is not None:
+        return
+    _reset_to_head(settings.test_database_url)
+
+
 @pytest.mark.integration
 def test_every_migration_reverses_against_the_real_database() -> None:
     url = _skip_unless_database()
@@ -166,18 +184,49 @@ def test_every_migration_reverses_against_the_real_database() -> None:
 
 
 @pytest.mark.integration
-@pytest.mark.xfail(
-    reason=(
-        "the baseline creates no schema objects, so the round trip covers nothing and proves "
-        "nothing (S-002, D-015). Strict: the day S-010 adds a table this fails, and deleting "
-        "the marker is the fix."
-    ),
-    raises=AssertionError,
-    strict=True,
-)
 def test_the_round_trip_covers_at_least_one_schema_object() -> None:
+    """Was a strict xfail until S-010. The baseline created nothing, so the round trip
+    proved nothing, and the marker failed the day real tables landed — which is what it was
+    for. Deleted rather than kept: the harness now covers actual schema."""
     url = _skip_unless_database()
-    assert run_round_trip(url, alembic_config()).covered >= 1
+    covered = run_round_trip(url, alembic_config()).covered
+    assert covered >= 1, "the migrations create no schema objects, so the round trip is vacuous"
+
+
+#: Every table in `public` except alembic's own bookkeeping, read from the catalog rather
+#: than hardcoded — a hardcoded list is a second copy of the schema and drifts from it.
+#: Tables, not the schema: `DROP SCHEMA public CASCADE` would take timescaledb with it,
+#: because the extension is installed into `public` (verified, not assumed).
+_DROP_ALL_PUBLIC_TABLES = """
+DO $$
+DECLARE t text;
+BEGIN
+  FOR t IN SELECT tablename FROM pg_tables
+           WHERE schemaname = 'public' AND tablename <> 'alembic_version'
+  LOOP
+    EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', t);
+  END LOOP;
+END $$;
+"""
+
+
+def _reset_to_head(url: str) -> None:
+    """Put the database at a real head from any state, without asserting one.
+
+    This replaced `command.stamp(cfg, real_head)`, which was wrong in a way an empty
+    baseline could not reveal: stamping *claims* a revision is applied instead of applying
+    it. When the sabotage left the database at base, the stamp told alembic S-010's
+    migration was in place while its tables were gone, and the next run died on
+    `DROP TABLE price_metric` — "table does not exist". Surfaced the moment real schema
+    landed, which is the general shape: a cleanup that asserts state is fine until state
+    exists.
+
+    Clearing `alembic_version` by SQL rather than stamping also avoids resolving the
+    injected revision, which lives only in a `tmp_path` pytest is about to delete.
+    """
+    _execute(url, _DROP_ALL_PUBLIC_TABLES)
+    _execute(url, "DELETE FROM public.alembic_version")
+    command.upgrade(alembic_config(), "head")
 
 
 @pytest.mark.integration
@@ -208,8 +257,8 @@ def test_an_irreversible_migration_is_reported(tmp_path: Path) -> None:
     finally:
         # Not `command.downgrade` — the migration under test is the one that cannot be
         # reversed, so asking it to reverse itself fails exactly when cleanup is needed.
-        command.stamp(cfg, real_head)
         _execute(url, _DROP_PROBE)
+        _reset_to_head(url)
 
     assert diff(before, snapshot(url)) == [], "the sabotage leaked into the database"
 

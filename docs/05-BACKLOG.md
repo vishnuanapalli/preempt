@@ -119,18 +119,27 @@ without it.
 ### S-010 — Core schema
 **MUST**
 
-- [ ] Catalog, pool, and three hypertables per `01-DESIGN.md`
-- [ ] `observed_at` is part of every hypertable's primary key
-- [ ] No index that is an exact prefix of its own primary key — never-ship #20
-- [ ] `api/tests/test_reversibility.py` reports non-zero coverage and passes — which means
-      deleting the strict xfail on `test_the_round_trip_covers_at_least_one_schema_object`,
-      because from this story on the round trip has something to reverse. The wording this
-      replaces, "migration reversible against a real database", is the criterion S-002
-      retired for being satisfied by a migration that does nothing (D-015); it survived here
-      because it was written one sprint ahead
-- [ ] The harness's blind spot for TimescaleDB is settled before the first hypertable:
-      whether chunk tables carry a `deptype='e'` row in `pg_depend` and are therefore hidden
-      by the extension filter. Recorded as unestablished in `audit/REVERSIBILITY.txt`
+- [x] Catalog, pool, and three hypertables per `01-DESIGN.md` — `f317a85b9b46`. Verified in
+      the database, not from the migration: `timescaledb_information.hypertables` lists
+      `capacity_metric`, `interruption_event`, `price_metric`
+- [x] `observed_at` is part of every hypertable's primary key. Two reasons that agree —
+      TimescaleDB requires the partitioning column in any unique index, and per-pool history
+      over a window is the primary read
+- [x] No index that is an exact prefix of its own primary key — never-ship #20. No index is
+      declared for the `(pool_id, observed_at)` pattern precisely because the primary key
+      already serves it; that is how this defect arrives
+- [x] `api/tests/test_reversibility.py` reports non-zero coverage and passes. **The strict
+      xfail fired as designed** — it failed the moment real tables landed, which was the
+      signal to delete it, and it is gone. 22 passed, zero xfailed
+- [x] The harness's TimescaleDB blind spot is settled: chunks are **not** extension-owned
+      (no `pg_depend` row with `deptype = 'e'`) and `_timescaledb_internal` is not caught by
+      the `pg_%` filter, so the harness *does* see chunks — a downgrade orphaning one would be
+      reported. Established by creating a hypertable and querying `pg_depend`, not reasoned
+      about. Also learned: timescaledb is installed into `public`, so `DROP SCHEMA public
+      CASCADE` is never a safe reset here
+- [ ] Provenance recorded per row; a test asserts it can never be null — `source` is
+      non-nullable with a database CHECK on every fact table, but no test yet proves the
+      constraint fires. S-014
 
 ### S-011 — Market simulator, ported
 **MUST** · depends on S-010

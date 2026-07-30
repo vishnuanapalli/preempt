@@ -16,6 +16,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 from app.core.config import settings
+
+# Imported for its side effect: registering every model on Base.metadata. A model
+# module nobody imports is invisible to autogenerate, and the migration it should have
+# generated is silently empty — which is how a schema and its migrations drift apart
+# with nothing reporting it.
+from app.db import models  # noqa: F401
 from app.db.base import Base
 
 config = context.config
