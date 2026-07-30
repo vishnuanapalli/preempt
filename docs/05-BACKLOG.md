@@ -40,18 +40,18 @@ never-ship list.
 - [ ] Neon project created; connection string in `.env.example` as a placeholder only
 - [ ] A Neon branch serves as the dedicated test database; tests never touch the primary
 - [ ] Baseline migration applies to an empty database
-- [x] A reversibility harness applies each migration on its own against the local test
-      database — the `db-test` container on 5434, not the Neon branch the criterion above
-      still names — reverses it, re-applies it, then exercises the whole chain, and reports
-      any schema object the reverse failed to restore. It is proven able to fail by three
-      deliberately irreversible migrations, one per failure path, and by a twenty-two-case
-      mutation run over the harness itself — `api/tests/test_reversibility.py`, evidence in
-      `audit/REVERSIBILITY.txt`, rationale in D-015.
-      **The harness reports coverage, and today it covers nothing:** the baseline creates no
-      schema objects, so there is nothing to reverse and this criterion asserts only that
-      the check exists and works. It starts proving something about *these* migrations when
-      S-010 adds the schema, and `test_the_round_trip_covers_at_least_one_schema_object`
-      turns XPASS on that day.
+- [x] A reversibility harness runs the whole migration chain against the local test database
+      — the `db-test` container on 5434, not the Neon branch the criterion above still names
+      — reversing and re-applying it, and reports any schema object the reverse failed to
+      restore. Proven able to fail by two deliberately broken migrations: one that drops
+      nothing on downgrade, one that raises on upgrade. `api/tests/test_reversibility.py`,
+      evidence in `audit/REVERSIBILITY.txt`, rationale in D-015 and D-016.
+      **Corrected 2026-07-29.** This criterion claimed per-migration stepping, three sabotage
+      shapes and a twenty-two-case mutation matrix for several hours after all three were
+      deleted at `3bfb297` (D-016, ledger R9/R10). STATUS and the audit file were corrected in
+      the same pass and this was missed — the one document of the three that asserts *done*.
+      **It covers real schema as of S-010:** `covered` is bounded below by twice the model
+      table count and every object class is checked, so a constant cannot satisfy it.
       The criterion this replaces — "`alembic downgrade base` then `upgrade head` succeeds
       against a real database" — was satisfied by a migration whose `upgrade()` and
       `downgrade()` are both `pass`, and was reported as evidence in the Sprint 0 demo.

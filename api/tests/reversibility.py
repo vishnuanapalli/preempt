@@ -171,6 +171,11 @@ def reachable(url: str) -> str | None:
 _LOOPBACK = {"", "localhost", "127.0.0.1", "::1"}
 
 
+def is_loopback(url: str) -> bool:
+    """True when the URL names this machine. Used where there is no second URL to compare."""
+    return (make_url(url).host or "").lower() in _LOOPBACK
+
+
 def same_database(a: str, b: str) -> bool:
     """True when two URLs name the same host, port and database.
 
@@ -224,6 +229,12 @@ class RoundTrip:
         """Objects the migrations create. Zero means the round trip proved nothing."""
         b = {(c, i) for c, i, _ in self.base.objects}
         return len({(c, i) for c, i, _ in self.head.objects} - b)
+
+    @property
+    def head_classes(self) -> set[str]:
+        """Object classes actually read at head. `covered` counts rows and is satisfied by a
+        single query returning enough of them, so the class count needs its own check."""
+        return {cls for cls, _, _ in self.head.objects}
 
     @property
     def differences(self) -> list[str]:

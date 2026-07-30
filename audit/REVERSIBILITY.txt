@@ -35,7 +35,7 @@ live code. Verified: `localhost` against `127.0.0.1` on the same database fails 
 the dev database still holds only `alembic_version`.
 
 TRIMMED 2026-07-29. This file was 193 lines and the two reversibility files 1,429; they are
-now 32 and 484. (The gate's ratio counts all of `api/tests` — 636 lines against 300 of
+now 53 and 484 (32 was this file's size at `3bfb297` — the number being corrected, copied into its own correction). (The gate's ratio counts all of `api/tests` — 636 lines against 300 of
 application, 2.12:1 — so do not compare 1,429 to that number; the review caught exactly that
 mix-up here.) The removed machinery — a 22-case mutation matrix over the harness, chain stepping for a
 chain of one, seven speculative object classes — verified the harness rather than the
@@ -46,8 +46,11 @@ Known gaps, not a bound: row data, grants, ownership, triggers, policies, types,
 view and sequence internals, TimescaleDB objects, branched histories. A downgrade that
 destroys a table's contents while restoring its shape reads as reversible.
 
-Two guards are themselves unpinned, stated rather than left to be found: the NULL-definition
-raise in `_read_snapshot`, and the four object classes' *depth* — the definitions are compared,
-but nothing proves a view body or sequence parameter change would be caught, because those
-classes are no longer queried. Pinning either needs a fixture that creates the objects, which
-is what the trim removed. Revisit at S-010, when real tables make it load-bearing.
+One guard is still unpinned, stated rather than left to be found: the NULL-definition raise in
+`_read_snapshot`. Nothing exercises it.
+
+The *depth* of the four classes is also unproven — definitions are compared, but nothing shows
+that a change within a class would be caught, because pinning that needs a fixture the trim
+removed. The class *count* is now pinned: `covered` counts rows and was satisfied by a single
+query returning enough of them, so `head_classes` checks all four are read. Real schema
+supplies all four, so no fixture was needed after all.
