@@ -214,16 +214,36 @@ an uptime-monitor account, and the 24-hour CU-hours window.
 
 ## Current position
 
-**Phase 4 complete** (`docs/.phase` = 4). All planning documents are written. Sprint 0 is
-in progress.
+**Phase 4 complete. Sprint 0 partly done, Sprint 1 mostly done** — the two were worked out of
+order because Sprint 0's remaining items are owner-blocked or documentation, while Sprint 1 is
+where the product is.
+
+**What actually works, end to end, verified by running it:**
+live Azure retail API → 3,194 spot observations over 9 pages → store-on-change writer → rows in
+TimescaleDB with provenance. Measured `Standard_F2s_v2 linux $0.018612/hr [measured]`. Three
+providers have data: Azure measured, AWS and GCP deterministically simulated and labelled.
 
 | Story | State |
 |-------|-------|
-| S-001 gate is real and runs in CI | **Not done.** The gate runs in CI structurally, but no artifact anywhere records the red run. `03-QUALITY.md` DoD 2 requires that output on record and `docs/DEMO.md` explicitly refuses to hold it — a criterion and its deliverable contradicting each other |
-| S-002 database provisioned, migrations reversible | **Partial.** Reversibility is now established by a harness that compares schemas, and is proven able to fail (D-015, `audit/REVERSIBILITY.txt`) — but it covers nothing until S-010, and it says so. Still open on this story: the Neon project, and the Neon-branch test database that was replaced by a local container with no ADR |
-| S-003 health endpoint reporting freshness | **Partial.** `/health` and `/ready` split per D-009; `/ready` still returns nulls because no tables exist yet |
-| S-004 live on the public internet | **Partial.** Serving over HTTPS since `43673c8`; one of six acceptance criteria met — see below |
-| S-005 seed script | **Deferred into Sprint 1** (docs/05-BACKLOG.md). Needs a decision entry — BLOCK item 7 |
+| S-005 seed script | **Complete.** Catalog seeded, idempotent, recovery path in the runbook |
+| S-011 simulator | **Complete.** Cross-process determinism proven under three `PYTHONHASHSEED` values |
+| S-012 Azure provider | **Complete.** Real prices, typed errors, 15 tests against recorded payloads |
+| S-014 provenance | **Complete.** Enforced in the database, verified in raw SQL |
+| S-010 core schema | 5/6 — only the reversibility-harness criterion's re-review is outstanding |
+| S-013 writer | 5/6 — the catalog dependency it opened is now closed by S-005 |
+| S-002 database provisioned | 1/5 — **needs the Neon URL (owner)** |
+| S-001 gate in CI | 0/4 ticked, but the work is done: CI runs the gate, red run recorded in `audit/CI-RED.txt` |
+| S-003 health freshness | 0/4 — `/ready` returns nulls; needs the ingest tick wired to a real database |
+| S-004 live on the internet | 1/6 — serving; needs the Neon URL and an uptime monitor (owner) |
+| S-015 retention, S-016 backfill | not started |
+
+**The one thing blocking a demo that is not mine to unblock:** `PREEMPT_DATABASE_URL`. The
+pipeline works against the local database. Production has no database, so the deployed app
+serves `/health` and nothing else. Everything downstream — `/ready` freshness, the query API,
+any page a person would look at — needs it.
+
+**In flight:** `api/app/ingest/tick.py` — one tick across all three providers, written and
+committed, not yet tested or wired to a scheduler. That is the next piece.
 
 ## The Vercel problem — resolved 2026-07-28 in `43673c8`
 
